@@ -85,17 +85,42 @@ export default function IntakeForm() {
 
   const { data: session, isLoading } = trpc.intake.getByToken.useQuery(
     { token: token ?? "" },
-    { enabled: !!token, refetchInterval: submitted ? 3000 : false }
+    {
+      enabled: !!token,
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return false;
+        // 待機中・SF登録待ちの場合はポーリング継続
+        if (data.status === "waiting" || data.status === "sf_pending") return 3000;
+        return false;
+      },
+    }
   );
 
   const submitIntake = trpc.intake.submitIntake.useMutation();
+  const confirmPayment = trpc.intake.confirmPayment.useMutation();
 
-  // 相談完了後にアンケートへ遷移
+  // 既存セッション（ページ再読み込み）の場合、stepを適切に設定
   useEffect(() => {
-    if (submitted && session?.status === "survey") {
+    if (!session) return;
+    if (!submitted) {
+      // paymentStatus=shownならQR画面
+      if (session.paymentStatus === "shown" || session.paymentStatus === "confirmed") {
+        setStep(5);
+      } else if (session.status === "waiting" || session.status === "sf_pending" || session.status === "consulting") {
+        // 送信済みで待機中なら待機画面
+        setStep(4);
+      }
+    }
+    // 支払い待ち→ QR表示画面に切り替わる
+    if (session.paymentStatus === "shown" && step === 4) {
+      setStep(5);
+    }
+    // アンケート→ 遷移
+    if (session.status === "survey") {
       navigate(`/intake/${token}/survey`);
     }
-  }, [submitted, session?.status, token, navigate]);
+  }, [session?.paymentStatus, session?.status, token, navigate, submitted]);
 
   if (!token || isLoading) {
     return (
@@ -117,8 +142,8 @@ export default function IntakeForm() {
     );
   }
 
-  // 既に送信済み（待機中・相談中）
-  if (!submitted && (session.status === "waiting" || session.status === "consulting" || session.status === "sf_pending")) {
+  // step=4: 待機画面（送信後）
+  if (step === 4) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Header />
@@ -442,6 +467,22 @@ export default function IntakeForm() {
         {step === 4 && (
           <WaitingScreen clientName={form.clientName} />
         )}
+
+        {/* ── ステップ5: 相談料・PayPay QR表示 ── */}
+        {step === 5 && (
+          <PaymentScreen
+            clientName={form.clientName}
+            amount={session?.paymentAmount ?? 0}
+            onConfirm={async () => {
+              try {
+                await confirmPayment.mutateAsync({ token: token ?? "" });
+              } catch {
+                alert("スタッフにお声がけください。");
+              }
+            }}
+            isPending={confirmPayment.isPending}
+          />
+        )}
       </div>
     </div>
   );
@@ -480,6 +521,84 @@ function ConfirmSection({ title, items, emptyMessage }: {
       )) : (
         <p className="text-sm text-slate-400">{emptyMessage ?? "入力なし"}</p>
       )}
+    </div>
+  );
+}
+
+// PayPay QR画像（ダミー）
+// ※ 後ほど実際のPayPay QR画像URLに差し替えてください
+const PAYPAY_QR_5000 = "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%C2%A55%2C000";
+const PAYPAY_QR_10000 = "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%C2%A510%2C000";
+const PAYPAY_QR_OTHER = "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%E4%BB%BB%E6%84%8F%E9%87%91%E9%A1%8D";
+
+function getQrImage(amount: number): string {
+  if (amount === 5000) return PAYPAY_QR_5000;
+  if (amount === 10000) return PAYPAY_QR_10000;
+  return PAYPAY_QR_OTHER;
+}
+
+function PaymentScreen({
+  clientName,
+  amount,
+  onConfirm,
+  isPending,
+}: {
+  clientName: string | null;
+  amount: number;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[65vh] text-center space-y-6 px-4">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-bold text-slate-800">
+          {clientName ? `${clientName} 様` : "ご相談者様"}
+        </h2>
+        <p className="text-slate-500">相談料のお支払いをお願いします</p>
+      </div>
+
+      {/* 金額表示 */}
+      <div className="bg-[#0d2a6e] text-white rounded-2xl px-10 py-5 shadow-lg">
+        <p className="text-sm text-blue-200 mb-1">相談料</p>
+        <p className="text-4xl font-bold tracking-tight">
+          ¥{amount.toLocaleString()}
+          <span className="text-lg font-normal ml-1">（税込）</span>
+        </p>
+      </div>
+
+      {/* PayPay QRコード */}
+      <div className="bg-white rounded-2xl p-5 shadow-md border border-slate-100 space-y-3">
+        <div className="flex items-center justify-center gap-2">
+          <div className="bg-[#FF0033] rounded-lg px-3 py-1">
+            <span className="text-white font-bold text-sm">PayPay</span>
+          </div>
+          <span className="text-sm font-medium text-slate-700">でお支払いください</span>
+        </div>
+        <img
+          src={getQrImage(amount)}
+          alt="PayPay QRコード"
+          className="w-56 h-56 mx-auto rounded-xl object-cover"
+        />
+        <p className="text-xs text-slate-400">QRコードをPayPayアプリで読み取ってください</p>
+      </div>
+
+      {/* 支払い完了ボタン */}
+      <div className="w-full max-w-sm space-y-3">
+        <Button
+          onClick={onConfirm}
+          disabled={isPending}
+          className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700 gap-2"
+        >
+          {isPending ? (
+            <><Loader2 className="h-4 w-4 animate-spin" />処理中...</>
+          ) : (
+            <><CheckCircle2 className="h-5 w-5" />お支払いが完了しました</>
+          )}
+        </Button>
+        <p className="text-xs text-slate-400">
+          お支払い完了後、アンケートにご協力ください
+        </p>
+      </div>
     </div>
   );
 }

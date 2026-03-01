@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE intakeSessions\n  ADD COLUMN paymentAmount INT NULL,\n  ADD COLUMN paymentStatus ENUM('pending','shown','confirmed') NOT NULL DEFAULT 'pending',\n  ADD COLUMN paymentShownAt TIMESTAMP NULL,\n  ADD COLUMN paymentConfirmedAt TIMESTAMP NULL;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute \nALTER TABLE intakeSessions\n  ADD COLUMN paymentAmount INT NULL,\n  ADD COLUMN paymentStatus ENUM('pending','shown','confirmed') NOT NULL DEFAULT 'pending',\n  ADD COLUMN paymentShownAt TIMESTAMP NULL,\n  ADD COLUMN paymentConfirmedAt TIMESTAMP NULL;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3629
+}

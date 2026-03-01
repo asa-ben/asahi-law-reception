@@ -63,6 +63,10 @@ type Session = {
   intakeCompletedAt: Date | null;
   consultationCompletedAt: Date | null;
   surveyCompletedAt: Date | null;
+  paymentAmount: number | null;
+  paymentStatus: "pending" | "shown" | "confirmed" | null;
+  paymentShownAt: Date | null;
+  paymentConfirmedAt: Date | null;
   createdAt: Date;
 };
 
@@ -92,6 +96,19 @@ export default function IntakeSessions() {
       if (selectedSession) {
         setSelectedSession({ ...selectedSession, status: "sf_pending" });
       }
+    },
+  });
+
+  const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
+  const [customAmount, setCustomAmount] = useState("");
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+
+  const showPayment = trpc.intake.showPayment.useMutation({
+    onSuccess: () => {
+      toast.success("相談料QRを依頼者画面に表示しました");
+      setShowPaymentDialog(false);
+      utils.intake.list.invalidate();
+      refetch();
     },
   });
 
@@ -223,13 +240,14 @@ export default function IntakeSessions() {
           <QrCode className="h-4 w-4" />
           受付フローの使い方
         </h3>
-        <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+          <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
           <li>「受付URLを発行」→ URLをタブレット等で依頼者に渡す</li>
-          <li>依頼者が案件種別・個人情報・相手方情報を自己入力</li>
+          <li>依頼者が案件種別・個人情報・相手方情報を自己入力（入力完了後は「相談待機」画面に遷移）</li>
           <li>相談終了後、「相談完了 → SF登録へ」ボタンを押す</li>
+          <li><span className="text-[#FF0033] font-medium">PayPay</span>「相談料QRを依頼者画面に表示」ボタン → 金額選択（5,000円・10,000円・任意）→ 依頼者画面にQR表示</li>
+          <li>依頼者がPayPayで支払い完了ボタンを押す → アンケート画面に自動遷移</li>
           <li>「Salesforceフォームを開く」ボタンで情報が自動入力されたSFフォームが開く</li>
-          <li>SF側で確認・送信後、「送信完了を記録」ボタンを押す → 依頼者画面がアンケートに切り替わる</li>
-        </ol>
+          </ol>
       </div>
 
       {/* 検索 */}
@@ -301,6 +319,73 @@ export default function IntakeSessions() {
           </div>
         </div>
       )}
+
+      {/* PayPay金額選択ダイアログ */}
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="bg-[#FF0033] text-white text-sm font-bold px-2 py-0.5 rounded">PayPay</span>
+              相談料の金額を選択
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">依頼者画面に表示するPayPay QRコードの金額を選んでください</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[5000, 10000].map((amt) => (
+                <button
+                  key={amt}
+                  onClick={() => setPaymentAmount(paymentAmount === amt ? null : amt)}
+                  className={`rounded-xl border-2 p-3 text-center transition-all ${
+                    paymentAmount === amt
+                      ? "border-[#FF0033] bg-red-50 text-[#FF0033]"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground">相談料</p>
+                  <p className="text-lg font-bold">¥{amt.toLocaleString()}</p>
+                </button>
+              ))}
+              <button
+                onClick={() => setPaymentAmount(-1)}
+                className={`rounded-xl border-2 p-3 text-center transition-all ${
+                  paymentAmount === -1
+                    ? "border-[#FF0033] bg-red-50 text-[#FF0033]"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <p className="text-xs text-muted-foreground">任意</p>
+                <p className="text-lg font-bold">自由</p>
+              </button>
+            </div>
+            {paymentAmount === -1 && (
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">金額を入力（円）</label>
+                <Input
+                  type="number"
+                  placeholder="例: 8000"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                  className="text-lg font-bold"
+                />
+              </div>
+            )}
+            <Button
+              onClick={() => {
+                if (!selectedSession) return;
+                const amt = paymentAmount === -1 ? parseInt(customAmount, 10) : (paymentAmount ?? 0);
+                if (!amt || amt <= 0) { toast.error("金額を入力してください"); return; }
+                showPayment.mutate({ token: selectedSession.sessionToken, amount: amt });
+              }}
+              disabled={showPayment.isPending || paymentAmount === null}
+              className="w-full bg-[#FF0033] hover:bg-[#cc0029] text-white gap-2"
+            >
+              {showPayment.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              依頼者画面にQRを表示する
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 詳細・操作ダイアログ */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setSelectedSession(null); }}>
@@ -410,6 +495,29 @@ export default function IntakeSessions() {
                       {completeConsultation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                       相談完了 → Salesforce登録へ
                     </Button>
+                  )}
+
+                  {/* 相談料表示ボタン（sf_pending時に表示） */}
+                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "pending" && (
+                    <Button
+                      onClick={() => setShowPaymentDialog(true)}
+                      className="w-full gap-2 bg-[#FF0033] hover:bg-[#cc0029] text-white"
+                    >
+                      <span className="font-bold">PayPay</span>
+                      相談料QRを依頼者画面に表示
+                    </Button>
+                  )}
+                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "shown" && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      相談料QR表示中（依頼者の支払い待ち）— 金額: ¥{(selectedSession.paymentAmount ?? 0).toLocaleString()}
+                    </div>
+                  )}
+                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "confirmed" && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      相談料支払い確認済み — ¥{(selectedSession.paymentAmount ?? 0).toLocaleString()}
+                    </div>
                   )}
 
                   {/* Salesforce登録（sf_pending時） */}

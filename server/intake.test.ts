@@ -275,6 +275,32 @@ describe("survey.submit", () => {
   });
 });
 
+describe("intake.showPayment", () => {
+  it("認証済みスタッフが相談料QRを表示できる", async () => {
+    const caller = appRouter.createCaller(createAdminCtx());
+    const result = await caller.intake.showPayment({ token: "waiting-token", amount: 5000 });
+    expect(result.success).toBe(true);
+  });
+
+  it("未認証ユーザーはアクセスできない", async () => {
+    const caller = appRouter.createCaller(createPublicCtx());
+    await expect(caller.intake.showPayment({ token: "waiting-token", amount: 5000 })).rejects.toThrow();
+  });
+
+  it("金額0円はバリデーションエラー", async () => {
+    const caller = appRouter.createCaller(createAdminCtx());
+    await expect(caller.intake.showPayment({ token: "waiting-token", amount: 0 })).rejects.toThrow();
+  });
+});
+
+describe("intake.confirmPayment", () => {
+  it("依頼者が支払い完了を記録できる", async () => {
+    const caller = appRouter.createCaller(createPublicCtx());
+    const result = await caller.intake.confirmPayment({ token: "waiting-token" });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("settings", () => {
   it("認証済みスタッフが設定を取得できる", async () => {
     const caller = appRouter.createCaller(createAdminCtx());

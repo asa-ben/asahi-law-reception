@@ -148,6 +148,36 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // 相談料表示（スタッフが金額を選んでQRを表示）
+    showPayment: protectedProcedure
+      .input(z.object({
+        token: z.string(),
+        amount: z.number().int().min(1, "金額は1円以上で入力してください"),
+      }))
+      .mutation(async ({ input }) => {
+        await updateIntakeSession(input.token, {
+          paymentAmount: input.amount,
+          paymentStatus: "shown",
+          paymentShownAt: new Date(),
+          status: "sf_pending",
+        });
+        return { success: true };
+      }),
+
+    // 支払い確認（依頼者がボタンを押す）
+    confirmPayment: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) throw new Error("Session not found");
+        await updateIntakeSession(input.token, {
+          paymentStatus: "confirmed",
+          paymentConfirmedAt: new Date(),
+          status: "survey",
+        });
+        return { success: true };
+      }),
+
     // アンケート完了を記録（公開）
     completeSurvey: publicProcedure
       .input(z.object({ token: z.string(), surveyResponseId: z.number() }))

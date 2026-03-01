@@ -1,0 +1,24 @@
+{
+  "query": "SELECT id, clientName, status, paymentStatus, paymentAmount FROM intakeSessions ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute SELECT id, clientName, status, paymentStatus, paymentAmount FROM intakeSessions ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "30001",
+      "clientName": "NULL",
+      "status": "intake",
+      "paymentStatus": "pending",
+      "paymentAmount": "NULL"
+    },
+    {
+      "id": "1",
+      "clientName": "山田　太郎",
+      "status": "sf_pending",
+      "paymentStatus": "shown",
+      "paymentAmount": "5000"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tclientName\tstatus\tpaymentStatus\tpaymentAmount\n30001\tNULL\tintake\tpending\tNULL\n1\t山田　太郎\tsf_pending\tshown\t5000\n",
+  "stderr": "",
+  "execution_time_ms": 1564
+}

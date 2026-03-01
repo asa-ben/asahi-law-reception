@@ -77,6 +77,16 @@ export const intakeSessions = mysqlTable("intakeSessions", {
   opponentPhone: varchar("opponentPhone", { length: 20 }),
   opponentRelation: varchar("opponentRelation", { length: 128 }), // 依頼者との関係（元配偶者・加害者など）
 
+  // ── 相談料・支払い ──
+  paymentAmount: int("paymentAmount"),           // 相談料（円）
+  paymentStatus: mysqlEnum("paymentStatus", [
+    "pending",   // 未表示
+    "shown",     // QR表示済み（支払い待ち）
+    "confirmed", // 支払い確認済み
+  ]).default("pending"),
+  paymentShownAt: timestamp("paymentShownAt"),   // QR表示日時
+  paymentConfirmedAt: timestamp("paymentConfirmedAt"), // 支払い確認日時
+
   // ── Salesforce送信状況 ──
   sfClientSentAt: timestamp("sfClientSentAt"),   // 依頼者リード送信日時
   sfOpponentSentAt: timestamp("sfOpponentSentAt"), // 相手方リード送信日時

@@ -1,0 +1,8 @@
+{
+  "query": "\nALTER TABLE intakeSessions\n  ADD COLUMN paymentAmount INT NULL AFTER opponentRelation,\n  ADD COLUMN paymentStatus ENUM('pending','shown','confirmed') NOT NULL DEFAULT 'pending' AFTER paymentAmount,\n  ADD COLUMN paymentShownAt TIMESTAMP NULL AFTER paymentStatus,\n  ADD COLUMN paymentConfirmedAt TIMESTAMP NULL AFTER paymentShownAt;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute \nALTER TABLE intakeSessions\n  ADD COLUMN paymentAmount INT NULL AFTER opponentRelation,\n  ADD COLUMN paymentStatus ENUM('pending','shown','confirmed') NOT NULL DEFAULT 'pending' AFTER paymentAmount,\n  ADD COLUMN paymentShownAt TIMESTAMP NULL AFTER paymentStatus,\n  ADD COLUMN paymentConfirmedAt TIMESTAMP NULL AFTER paymentShownAt;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'paymentamount' in 'intakeSessions'"
+  ]
+}
