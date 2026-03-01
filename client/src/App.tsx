@@ -13,23 +13,36 @@ import Clients from "./pages/Clients";
 import Checklists from "./pages/Checklists";
 import Survey from "./pages/Survey";
 import Surveys from "./pages/Surveys";
+import IntakeForm from "./pages/IntakeForm";
+import IntakeSurvey from "./pages/IntakeSurvey";
+import IntakeSessions from "./pages/IntakeSessions";
 
 function Router() {
   return (
-    <DashboardLayout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/cases" component={Cases} />
-        <Route path="/cases/new" component={CaseNew} />
-        <Route path="/cases/:id" component={CaseDetail} />
-        <Route path="/clients" component={Clients} />
-        <Route path="/checklists" component={Checklists} />
-        <Route path="/survey" component={Survey} />
-        <Route path="/surveys" component={Surveys} />
-        <Route path="/404" component={NotFound} />
-        <Route component={NotFound} />
-      </Switch>
-    </DashboardLayout>
+    <Switch>
+      {/* 公開ページ（DashboardLayout不要） */}
+      <Route path="/intake/:token/survey" component={IntakeSurvey} />
+      <Route path="/intake/:token" component={IntakeForm} />
+
+      {/* 管理画面（DashboardLayout） */}
+      <Route>
+        <DashboardLayout>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/cases" component={Cases} />
+            <Route path="/cases/new" component={CaseNew} />
+            <Route path="/cases/:id" component={CaseDetail} />
+            <Route path="/clients" component={Clients} />
+            <Route path="/checklists" component={Checklists} />
+            <Route path="/survey" component={Survey} />
+            <Route path="/surveys" component={Surveys} />
+            <Route path="/intake-sessions" component={IntakeSessions} />
+            <Route path="/404" component={NotFound} />
+            <Route component={NotFound} />
+          </Switch>
+        </DashboardLayout>
+      </Route>
+    </Switch>
   );
 }
 

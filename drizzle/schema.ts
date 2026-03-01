@@ -163,3 +163,39 @@ export const surveyResponses = mysqlTable("surveyResponses", {
 
 export type SurveyResponse = typeof surveyResponses.$inferSelect;
 export type InsertSurveyResponse = typeof surveyResponses.$inferInsert;
+
+// 受付セッションテーブル（依頼者自己入力→相談→アンケートの一連フロー管理）
+export const intakeSessions = mysqlTable("intakeSessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionToken: varchar("sessionToken", { length: 64 }).notNull().unique(), // URLトークン
+  // ステータス: intake=個人情報入力中, waiting=相談待機中, consulting=相談中, survey=アンケート中, completed=完了
+  status: mysqlEnum("status", ["intake", "waiting", "consulting", "survey", "completed"]).default("intake").notNull(),
+  // 個人情報（依頼者自己入力）
+  nameKana: varchar("nameKana", { length: 128 }),
+  name: varchar("name", { length: 128 }),
+  birthDate: date("birthDate"),
+  postalCode: varchar("postalCode", { length: 10 }),
+  address: text("address"),
+  phone: varchar("phone", { length: 20 }),
+  mobile: varchar("mobile", { length: 20 }),
+  email: varchar("email", { length: 320 }),
+  occupation: varchar("occupation", { length: 128 }),
+  referrer: varchar("referrer", { length: 128 }),
+  consultationReason: text("consultationReason"), // 相談の概要（任意）
+  // 紐付け
+  caseId: int("caseId"), // 事件IDと紐付け（任意）
+  surveyResponseId: int("surveyResponseId"), // アンケート回答IDと紐付け
+  // Salesforce出力フラグ
+  exportedToSalesforce: boolean("exportedToSalesforce").default(false),
+  exportedAt: timestamp("exportedAt"),
+  // タイムスタンプ
+  intakeCompletedAt: timestamp("intakeCompletedAt"),
+  consultationStartedAt: timestamp("consultationStartedAt"),
+  consultationCompletedAt: timestamp("consultationCompletedAt"),
+  surveyCompletedAt: timestamp("surveyCompletedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type IntakeSession = typeof intakeSessions.$inferSelect;
+export type InsertIntakeSession = typeof intakeSessions.$inferInsert;

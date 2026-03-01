@@ -15,6 +15,13 @@
       "when": 1772343760777,
       "tag": "0001_lean_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772348038053,
+      "tag": "0002_windy_namorita",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import {
   InsertCase,
   InsertChecklist,
   InsertClient,
+  InsertIntakeSession,
   InsertOpponent,
   InsertSurveyResponse,
   InsertUser,
@@ -15,6 +16,7 @@ import {
   cases,
   checklists,
   clients,
+  intakeSessions,
   opponents,
   surveyResponses,
   users,
@@ -262,6 +264,50 @@ export async function getSurveyStats() {
   const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   for (const r of all) distribution[r.satisfaction] = (distribution[r.satisfaction] ?? 0) + 1;
   return { total, avgSatisfaction: Math.round(avgSatisfaction * 10) / 10, highSatisfaction, googleReviewShown, distribution };
+}
+
+// ─── Intake Sessions ─────────────────────────────────────────────────────────
+
+export async function createIntakeSession(token: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(intakeSessions).values({ sessionToken: token, status: "intake" });
+  return (result[0] as { insertId: number }).insertId;
+}
+
+export async function getIntakeSessionByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(intakeSessions).where(eq(intakeSessions.sessionToken, token)).limit(1);
+  return result[0];
+}
+
+export async function getIntakeSessionById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(intakeSessions).where(eq(intakeSessions.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateIntakeSession(id: number, data: Partial<InsertIntakeSession>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(intakeSessions).set(data).where(eq(intakeSessions.id, id));
+}
+
+export async function listIntakeSessions(limit = 50, offset = 0, search?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  if (search) {
+    return db
+      .select()
+      .from(intakeSessions)
+      .where(or(like(intakeSessions.name, `%${search}%`), like(intakeSessions.nameKana, `%${search}%`), like(intakeSessions.email, `%${search}%`)))
+      .orderBy(desc(intakeSessions.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+  return db.select().from(intakeSessions).orderBy(desc(intakeSessions.createdAt)).limit(limit).offset(offset);
 }
 
 // ─── Dashboard Stats ─────────────────────────────────────────────────────────

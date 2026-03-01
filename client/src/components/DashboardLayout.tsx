@@ -29,6 +29,7 @@ import {
   LogOut,
   MessageSquare,
   PanelLeft,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -41,6 +42,7 @@ const LOGO_TEXT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMC
 
 const menuItems = [
   { icon: LayoutDashboard, label: "ダッシュボード", path: "/" },
+  { icon: UserCheck, label: "受付管理", path: "/intake-sessions" },
   { icon: Briefcase, label: "事件一覧", path: "/cases" },
   { icon: Users, label: "依頼者一覧", path: "/clients" },
   { icon: ClipboardList, label: "チェックリスト", path: "/checklists" },

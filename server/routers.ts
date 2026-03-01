@@ -6,23 +6,28 @@ import {
   countCases,
   createCase,
   createClient,
+  createIntakeSession,
   createOpponent,
   createSurveyResponse,
   getCaseDetail,
   getDashboardStats,
   getChecklistByCaseId,
   getClientByCaseId,
+  getIntakeSessionByToken,
   getOpponentByCaseId,
   listCases,
   listClients,
+  listIntakeSessions,
   listSurveyResponses,
   getSurveyStats,
   updateCase,
   updateClient,
+  updateIntakeSession,
   updateOpponent,
   updateSurveyResponse,
   upsertChecklist,
 } from "./db";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 
 // ─── Shared Schemas ───────────────────────────────────────────────────────────
@@ -199,6 +204,89 @@ export const appRouter = router({
       await upsertChecklist(input.caseId, data);
       return { success: true };
     }),
+  }),
+
+  // Intake Sessions
+  intake: router({
+    // 新規セッション作成（スタッフがタブレットでQR表示用に生成）
+    createSession: protectedProcedure.mutation(async () => {
+      const token = nanoid(16);
+      const id = await createIntakeSession(token);
+      return { id, token };
+    }),
+    // 公開：トークンでセッション取得
+    getByToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) return null;
+        return session;
+      }),
+    // 公開：個人情報を保存（依頼者自己入力）
+    submitIntake: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        nameKana: z.string().optional(),
+        name: z.string(),
+        birthDate: z.string().optional(),
+        postalCode: z.string().optional(),
+        address: z.string().optional(),
+        phone: z.string().optional(),
+        mobile: z.string().optional(),
+        email: z.string().optional(),
+        occupation: z.string().optional(),
+        referrer: z.string().optional(),
+        consultationReason: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) throw new Error("Session not found");
+        if (session.status !== "intake") throw new Error("Session already submitted");
+        const birthDate = input.birthDate ? new Date(input.birthDate) : undefined;
+        await updateIntakeSession(session.id, {
+          ...input,
+          birthDate,
+          status: "waiting",
+          intakeCompletedAt: new Date(),
+        });
+        return { success: true };
+      }),
+    // スタッフ用：相談完了ボタン（アンケート遷移トリガー）
+    completeConsultation: protectedProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) throw new Error("Session not found");
+        await updateIntakeSession(session.id, {
+          status: "survey",
+          consultationCompletedAt: new Date(),
+        });
+        return { success: true };
+      }),
+    // 公開：アンケート完了時にセッションを完了に更新
+    completeSurvey: publicProcedure
+      .input(z.object({ token: z.string(), surveyResponseId: z.number() }))
+      .mutation(async ({ input }) => {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) throw new Error("Session not found");
+        await updateIntakeSession(session.id, {
+          status: "completed",
+          surveyResponseId: input.surveyResponseId,
+          surveyCompletedAt: new Date(),
+        });
+        return { success: true };
+      }),
+    // 管理画面：セッション一覧
+    list: protectedProcedure
+      .input(z.object({ search: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() }))
+      .query(({ input }) => listIntakeSessions(input.limit, input.offset, input.search)),
+    // Salesforce出力フラグを更新
+    markExported: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await updateIntakeSession(input.id, { exportedToSalesforce: true, exportedAt: new Date() });
+        return { success: true };
+      }),
   }),
 
   // Surveys
