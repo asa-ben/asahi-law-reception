@@ -1,0 +1,103 @@
+CREATE TABLE `cases` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`caseNumber` varchar(64),
+	`consultationDate` date,
+	`status` enum('consultation','ongoing','closed') NOT NULL DEFAULT 'consultation',
+	`assignedLawyer` varchar(128),
+	`caseType` varchar(128),
+	`notes` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `cases_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `checklists` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`caseId` int NOT NULL,
+	`contractCreated` boolean DEFAULT false,
+	`contractDate` date,
+	`feeExplained` boolean DEFAULT false,
+	`feeExplainDate` date,
+	`conflictChecked` boolean DEFAULT false,
+	`conflictResult` enum('none','applicable') DEFAULT 'none',
+	`conflictArticle` varchar(64),
+	`conflictClientConsentDate` date,
+	`conflictOpponentConsentDate` date,
+	`depositChecked` boolean DEFAULT false,
+	`depositExists` boolean DEFAULT false,
+	`depositReceiptIssued` boolean DEFAULT false,
+	`depositReportDate` date,
+	`identityVerified` boolean DEFAULT false,
+	`identityVerifyType` enum('not_required','normal','strict') DEFAULT 'not_required',
+	`identityVerifyDate` date,
+	`identityVerifier` varchar(128),
+	`processingStatus` enum('consultation_only','ongoing','accepted') DEFAULT 'consultation_only',
+	`fileStatus` enum('filed','pdf','unnecessary','consultation_file'),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `checklists_id` PRIMARY KEY(`id`),
+	CONSTRAINT `checklists_caseId_unique` UNIQUE(`caseId`)
+);
+--> statement-breakpoint
+CREATE TABLE `clients` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`caseId` int NOT NULL,
+	`nameKana` varchar(128),
+	`name` varchar(128) NOT NULL,
+	`birthDate` date,
+	`postalCode` varchar(10),
+	`address` text,
+	`phone` varchar(20),
+	`mobile` varchar(20),
+	`fax` varchar(20),
+	`email` varchar(320),
+	`emailType` enum('pc','mobile') DEFAULT 'pc',
+	`invoiceSendMethod` enum('email','mail') DEFAULT 'email',
+	`otherPostalCode` varchar(10),
+	`otherAddress` text,
+	`otherPhone` varchar(20),
+	`referrer` varchar(128),
+	`occupation` varchar(128),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `clients_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `opponents` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`caseId` int NOT NULL,
+	`nameKana` varchar(128),
+	`name` varchar(128),
+	`birthDate` date,
+	`postalCode` varchar(10),
+	`address` text,
+	`phone` varchar(20),
+	`mobile` varchar(20),
+	`fax` varchar(20),
+	`agentName` varchar(128),
+	`agentPostalCode` varchar(10),
+	`agentAddress` text,
+	`agentPhone` varchar(20),
+	`agentFax` varchar(20),
+	`mailOption` enum('mail_ok','mail_ng') DEFAULT 'mail_ok',
+	`envelopeType` enum('office','plain'),
+	`mailDestination` enum('home','work','other'),
+	`mailDestinationOther` varchar(128),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `opponents_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `surveyResponses` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`caseId` int,
+	`satisfaction` int NOT NULL,
+	`goodPoints` text,
+	`visitTrigger` text,
+	`visitTriggerOther` text,
+	`freeComment` text,
+	`googleReviewShown` boolean DEFAULT false,
+	`googleReviewClicked` boolean DEFAULT false,
+	`submittedAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `surveyResponses_id` PRIMARY KEY(`id`)
+);
