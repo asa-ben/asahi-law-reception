@@ -1,0 +1,9 @@
+{
+  "query": "\nDROP TABLE IF EXISTS `intakeSessions`;\nDROP TABLE IF EXISTS `surveyResponses`;\nDROP TABLE IF EXISTS `checklists`;\nDROP TABLE IF EXISTS `opponents`;\nDROP TABLE IF EXISTS `clients`;\nDROP TABLE IF EXISTS `cases`;\nDROP TABLE IF EXISTS `appSettings`;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute \nDROP TABLE IF EXISTS `intakeSessions`;\nDROP TABLE IF EXISTS `surveyResponses`;\nDROP TABLE IF EXISTS `checklists`;\nDROP TABLE IF EXISTS `opponents`;\nDROP TABLE IF EXISTS `clients`;\nDROP TABLE IF EXISTS `cases`;\nDROP TABLE IF EXISTS `appSettings`;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 7259
+}

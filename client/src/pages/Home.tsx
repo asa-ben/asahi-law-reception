@@ -1,61 +1,66 @@
 import { trpc } from "@/lib/trpc";
-import { Briefcase, ClipboardCheck, MessageSquare, Star, TrendingUp, Users } from "lucide-react";
+import { CheckCircle2, ClipboardList, Link2, MessageSquare, Star, Users } from "lucide-react";
 import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
-  const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
+  const { data: stats, isLoading } = trpc.intake.stats.useQuery();
+  const { data: surveyStats } = trpc.survey.stats.useQuery();
   const [, setLocation] = useLocation();
+  const createSession = trpc.intake.createSession.useMutation({
+    onSuccess: async (data) => {
+      const url = `${window.location.origin}/intake/${data.token}`;
+      await navigator.clipboard.writeText(url);
+      import("sonner").then(({ toast }) =>
+        toast.success("受付URLをコピーしました", { description: url })
+      );
+    },
+  });
 
   const statCards = [
     {
-      label: "総事件数",
-      value: stats?.totalCases ?? 0,
-      icon: Briefcase,
-      color: "text-primary",
-      bg: "bg-primary/10",
-      action: () => setLocation("/cases"),
+      label: "本日の受付",
+      value: stats?.todayCount ?? 0,
+      icon: Users,
+      color: "text-[#0d2a6e]",
+      bg: "bg-[#0d2a6e]/10",
     },
     {
-      label: "進行中の事件",
-      value: stats?.ongoingCases ?? 0,
-      icon: TrendingUp,
+      label: "相談待ち・相談中",
+      value: stats?.waiting ?? 0,
+      icon: ClipboardList,
       color: "text-amber-600",
       bg: "bg-amber-50",
-      action: () => setLocation("/cases"),
     },
     {
-      label: "依頼者数",
-      value: stats?.totalClients ?? 0,
-      icon: Users,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
-      action: () => setLocation("/clients"),
+      label: "SF登録待ち",
+      value: stats?.sfPending ?? 0,
+      icon: CheckCircle2,
+      color: "text-purple-600",
+      bg: "bg-purple-50",
     },
     {
       label: "アンケート回答数",
-      value: stats?.surveyStats.total ?? 0,
+      value: surveyStats?.total ?? 0,
       icon: MessageSquare,
       color: "text-violet-600",
       bg: "bg-violet-50",
-      action: () => setLocation("/surveys"),
     },
   ];
 
   return (
     <div className="space-y-6">
-      {/* ページヘッダー */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">ダッシュボード</h1>
-        <p className="text-sm text-muted-foreground mt-1">朝日弁護士法人 業務管理システム</p>
+        <p className="text-sm text-muted-foreground mt-1">朝日弁護士法人 依頼者登録システム</p>
       </div>
 
       {/* 統計カード */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((card) => (
-          <button
+          <div
             key={card.label}
-            onClick={card.action}
-            className="bg-card rounded-xl border border-border p-5 text-left hover:shadow-md transition-all hover:border-primary/30 group"
+            className="bg-card rounded-xl border border-border p-5"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -68,28 +73,30 @@ export default function Home() {
                 <card.icon className={`h-5 w-5 ${card.color}`} />
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
 
       {/* アンケート満足度サマリー */}
-      {stats && stats.surveyStats.total > 0 && (
+      {surveyStats && surveyStats.total > 0 && (
         <div className="bg-card rounded-xl border border-border p-5">
           <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Star className="h-4 w-4 text-amber-500" />
+            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
             アンケート満足度サマリー
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-3xl font-bold text-primary">{stats.surveyStats.avgSatisfaction}</p>
+              <p className="text-3xl font-bold text-[#0d2a6e]">{surveyStats.avgSatisfaction}</p>
               <p className="text-sm text-muted-foreground mt-1">平均満足度（5点満点）</p>
             </div>
             <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-3xl font-bold text-emerald-600">{stats.surveyStats.highSatisfaction}</p>
+              <p className="text-3xl font-bold text-emerald-600">
+                {surveyStats.distribution.slice(3).reduce((a, b) => a + b, 0)}
+              </p>
               <p className="text-sm text-muted-foreground mt-1">高評価（4点以上）</p>
             </div>
             <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-3xl font-bold text-foreground">{stats.surveyStats.total}</p>
+              <p className="text-3xl font-bold text-foreground">{surveyStats.total}</p>
               <p className="text-sm text-muted-foreground mt-1">総回答数</p>
             </div>
           </div>
@@ -98,47 +105,34 @@ export default function Home() {
 
       {/* クイックアクション */}
       <div className="bg-card rounded-xl border border-border p-5">
-        <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-primary" />
-          クイックアクション
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <button
-            onClick={() => setLocation("/cases/new")}
-            className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-primary/40 hover:bg-primary/5 hover:border-primary transition-all text-left"
+        <h2 className="text-base font-semibold text-foreground mb-4">クイックアクション</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Button
+            onClick={() => createSession.mutate()}
+            disabled={createSession.isPending}
+            className="flex items-center gap-3 p-5 h-auto justify-start bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
           >
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <Briefcase className="h-4 w-4 text-primary" />
+            <div className="bg-white/20 p-2 rounded-lg shrink-0">
+              <Link2 className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">新規事件登録</p>
-              <p className="text-xs text-muted-foreground">依頼者情報・事件情報を入力</p>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">受付URLを発行</p>
+              <p className="text-xs text-white/70">依頼者に渡す受付フォームURLを生成</p>
             </div>
-          </button>
-          <button
-            onClick={() => setLocation("/survey")}
-            className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-violet-300 hover:bg-violet-50 hover:border-violet-400 transition-all text-left"
+          </Button>
+          <Button
+            onClick={() => setLocation("/intake-sessions")}
+            variant="outline"
+            className="flex items-center gap-3 p-5 h-auto justify-start"
           >
-            <div className="bg-violet-100 p-2 rounded-lg">
-              <MessageSquare className="h-4 w-4 text-violet-600" />
+            <div className="bg-primary/10 p-2 rounded-lg shrink-0">
+              <ClipboardList className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">アンケートを開く</p>
-              <p className="text-xs text-muted-foreground">相談後に相談者へ渡す</p>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-foreground">受付管理を開く</p>
+              <p className="text-xs text-muted-foreground">Salesforce登録・アンケート管理</p>
             </div>
-          </button>
-          <button
-            onClick={() => setLocation("/surveys")}
-            className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400 transition-all text-left"
-          >
-            <div className="bg-emerald-100 p-2 rounded-lg">
-              <Star className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">回答一覧を確認</p>
-              <p className="text-xs text-muted-foreground">アンケート回答を管理</p>
-            </div>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

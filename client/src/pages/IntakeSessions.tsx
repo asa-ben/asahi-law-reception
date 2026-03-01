@@ -1,89 +1,183 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   CheckCircle2,
+  ChevronRight,
   Clock,
   Copy,
   Download,
   ExternalLink,
-  Plus,
+  Link2,
+  Loader2,
   QrCode,
   Search,
+  Send,
   UserCheck,
+  Users,
+  UserX,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  intake: { label: "入力中", color: "bg-blue-100 text-blue-700" },
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  intake: { label: "入力中", color: "bg-slate-100 text-slate-600" },
   waiting: { label: "相談待ち", color: "bg-amber-100 text-amber-700" },
-  consulting: { label: "相談中", color: "bg-violet-100 text-violet-700" },
-  survey: { label: "アンケート中", color: "bg-orange-100 text-orange-700" },
-  completed: { label: "完了", color: "bg-emerald-100 text-emerald-700" },
+  consulting: { label: "相談中", color: "bg-blue-100 text-blue-700" },
+  sf_pending: { label: "SF登録待ち", color: "bg-purple-100 text-purple-700" },
+  survey: { label: "アンケート中", color: "bg-emerald-100 text-emerald-700" },
+  completed: { label: "完了", color: "bg-green-100 text-green-700" },
 };
 
-// Salesforce用フィールドマッピング
-const SF_FIELDS = [
-  { key: "name", label: "姓名" },
-  { key: "nameKana", label: "姓名（カナ）" },
-  { key: "birthDate", label: "生年月日" },
-  { key: "postalCode", label: "郵便番号" },
-  { key: "address", label: "住所" },
-  { key: "phone", label: "電話番号（自宅）" },
-  { key: "mobile", label: "携帯電話" },
-  { key: "email", label: "メールアドレス" },
-  { key: "occupation", label: "職業" },
-  { key: "referrer", label: "紹介者・来所のきっかけ" },
-  { key: "consultationReason", label: "相談概要" },
-];
+type Session = {
+  id: number;
+  sessionToken: string;
+  status: string;
+  caseCategory: "with_opponent" | "no_opponent" | null;
+  caseType: string | null;
+  clientName: string | null;
+  clientNameKana: string | null;
+  clientBirthDate: Date | null;
+  clientPostalCode: string | null;
+  clientAddress: string | null;
+  clientPhone: string | null;
+  clientMobile: string | null;
+  clientEmail: string | null;
+  clientOccupation: string | null;
+  clientReferrer: string | null;
+  consultationReason: string | null;
+  opponentName: string | null;
+  opponentNameKana: string | null;
+  opponentPostalCode: string | null;
+  opponentAddress: string | null;
+  opponentPhone: string | null;
+  opponentRelation: string | null;
+  sfClientSentAt: Date | null;
+  sfOpponentSentAt: Date | null;
+  intakeCompletedAt: Date | null;
+  consultationCompletedAt: Date | null;
+  surveyCompletedAt: Date | null;
+  createdAt: Date;
+};
 
 export default function IntakeSessions() {
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   const utils = trpc.useUtils();
+  const { data: sessions = [], isLoading, refetch } = trpc.intake.list.useQuery({ search: search || undefined, limit: 100 });
+  const { data: settings } = trpc.settings.getAll.useQuery();
 
-  const { data: sessions, isLoading } = trpc.intake.list.useQuery({ search: search || undefined, limit: 100 });
   const createSession = trpc.intake.createSession.useMutation({
-    onSuccess: () => utils.intake.list.invalidate(),
+    onSuccess: async (data) => {
+      const url = `${window.location.origin}/intake/${data.token}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("受付URLをクリップボードにコピーしました", { description: url });
+      refetch();
+    },
   });
+
   const completeConsultation = trpc.intake.completeConsultation.useMutation({
-    onSuccess: () => { utils.intake.list.invalidate(); toast.success("相談完了。依頼者の画面がアンケートに切り替わります。"); },
-  });
-  const markExported = trpc.intake.markExported.useMutation({
-    onSuccess: () => utils.intake.list.invalidate(),
+    onSuccess: () => {
+      toast.success("相談完了を記録しました。Salesforce登録へ進んでください。");
+      utils.intake.list.invalidate();
+      refetch();
+      if (selectedSession) {
+        setSelectedSession({ ...selectedSession, status: "sf_pending" });
+      }
+    },
   });
 
-  type SessionItem = NonNullable<typeof sessions>[number];
-  const selectedSession: SessionItem | undefined = sessions?.find((s) => s.id === selectedId);
+  const markSfSent = trpc.intake.markSfSent.useMutation({
+    onSuccess: () => {
+      toast.success("Salesforce送信完了を記録しました");
+      utils.intake.list.invalidate();
+      refetch();
+      if (selectedSession) {
+        const updated = { ...selectedSession, status: "survey" };
+        setSelectedSession(updated);
+      }
+    },
+  });
 
-  // 新規セッション作成
-  const handleCreateSession = async () => {
-    const result = await createSession.mutateAsync();
-    const url = `${window.location.origin}/intake/${result.token}`;
-    await navigator.clipboard.writeText(url);
-    toast.success("受付URLをクリップボードにコピーしました", { description: url });
+  const sfOrgId = settings?.sf_org_id ?? "";
+  const sfUrl = settings?.sf_web_to_lead_url ?? "https://webto.salesforce.com/servlet/servlet.WebToLead?encoding=UTF-8";
+
+  // Salesforce Web-to-Lead フォームを開く（情報を自動入力）
+  const openSfForm = (session: Session, type: "client" | "opponent") => {
+    if (!sfOrgId) {
+      toast.error("Salesforce組織IDが未設定です。設定画面で入力してください。");
+      return;
+    }
+
+    const params = new URLSearchParams({ oid: sfOrgId, retURL: window.location.href });
+
+    if (type === "client") {
+      if (session.clientName) {
+        const parts = session.clientName.trim().split(/\s+/);
+        params.set("last_name", parts[0] ?? "");
+        if (parts[1]) params.set("first_name", parts[1]);
+      }
+      if (session.clientPhone) params.set("phone", session.clientPhone);
+      if (session.clientMobile) params.set("mobile", session.clientMobile);
+      if (session.clientEmail) params.set("email", session.clientEmail);
+      if (session.clientAddress) params.set("street", session.clientAddress);
+      if (session.clientPostalCode) params.set("zip", session.clientPostalCode);
+      if (session.clientOccupation) params.set("title", session.clientOccupation);
+      if (session.caseType) params.set("description", `相談種別: ${session.caseType}${session.consultationReason ? `\n相談概要: ${session.consultationReason}` : ""}`);
+      if (session.clientReferrer) params.set("lead_source", session.clientReferrer);
+      params.set("company", "個人");
+    } else {
+      if (session.opponentName) {
+        const parts = session.opponentName.trim().split(/\s+/);
+        params.set("last_name", parts[0] ?? "");
+        if (parts[1]) params.set("first_name", parts[1]);
+      }
+      if (session.opponentPhone) params.set("phone", session.opponentPhone);
+      if (session.opponentAddress) params.set("street", session.opponentAddress);
+      if (session.opponentPostalCode) params.set("zip", session.opponentPostalCode);
+      const desc = [
+        session.opponentRelation ? `依頼者との関係: ${session.opponentRelation}` : "",
+        session.caseType ? `相談種別: ${session.caseType}` : "",
+        session.clientName ? `依頼者: ${session.clientName}` : "",
+      ].filter(Boolean).join("\n");
+      if (desc) params.set("description", desc);
+      params.set("company", "相手方");
+    }
+
+    window.open(`${sfUrl}&${params.toString()}`, "_blank", "noopener,noreferrer");
   };
 
-  // 相談完了ボタン
-  const handleCompleteConsultation = async (token: string) => {
-    await completeConsultation.mutateAsync({ token });
-  };
-
-  // Salesforce用CSVダウンロード（全件）
+  // CSV一括ダウンロード（Salesforce用）
   const handleDownloadCSV = () => {
     if (!sessions || sessions.length === 0) { toast.error("データがありません"); return; }
-    const header = SF_FIELDS.map((f) => f.label).join(",");
-    const rows = sessions
-      .filter((s) => s.name)
-      .map((s) =>
-        SF_FIELDS.map((f) => {
-          const val = (s as any)[f.key] ?? "";
-          const str = val instanceof Date ? val.toLocaleDateString("ja-JP") : String(val);
-          return `"${str.replace(/"/g, '""')}"`;
-        }).join(",")
-      );
-    const csv = "\uFEFF" + [header, ...rows].join("\n"); // BOM付きUTF-8
+    const headers = [
+      "受付日時", "ステータス", "案件種別",
+      "依頼者氏名", "依頼者ふりがな", "生年月日", "郵便番号", "住所",
+      "電話（自宅）", "携帯電話", "メール", "職業", "紹介者・来所のきっかけ", "相談概要",
+      "相手方氏名", "相手方ふりがな", "相手方住所", "相手方電話", "依頼者との関係",
+    ];
+    const rows = (sessions as Session[]).map((s) => [
+      new Date(s.createdAt).toLocaleDateString("ja-JP"),
+      STATUS_CONFIG[s.status]?.label ?? s.status,
+      s.caseType ?? (s.caseCategory === "with_opponent" ? "相手方あり" : s.caseCategory === "no_opponent" ? "相手方なし" : ""),
+      s.clientName ?? "", s.clientNameKana ?? "",
+      s.clientBirthDate ? new Date(s.clientBirthDate).toLocaleDateString("ja-JP") : "",
+      s.clientPostalCode ?? "", s.clientAddress ?? "",
+      s.clientPhone ?? "", s.clientMobile ?? "", s.clientEmail ?? "",
+      s.clientOccupation ?? "", s.clientReferrer ?? "", s.consultationReason ?? "",
+      s.opponentName ?? "", s.opponentNameKana ?? "",
+      s.opponentAddress ?? "", s.opponentPhone ?? "", s.opponentRelation ?? "",
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+
+    const csv = "\uFEFF" + [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -94,32 +188,30 @@ export default function IntakeSessions() {
     toast.success("CSVをダウンロードしました");
   };
 
-  // 個別コピー（Salesforce貼り付け用）
-  const handleCopySalesforce = async (session: SessionItem) => {
-    const lines = SF_FIELDS.map((f) => {
-      const val = (session as any)[f.key] ?? "";
-      const str = val instanceof Date ? val.toLocaleDateString("ja-JP") : String(val);
-      return `${f.label}: ${str}`;
-    }).join("\n");
-    await navigator.clipboard.writeText(lines);
-    await markExported.mutateAsync({ id: session.id });
-    toast.success("Salesforce用データをコピーしました");
-  };
+  const formatDate = (d: Date | null | undefined) =>
+    d ? new Date(d).toLocaleDateString("ja-JP") : "—";
+  const formatTime = (d: Date | null | undefined) =>
+    d ? new Date(d).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : null;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4">
+      {/* ヘッダー */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">受付管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">依頼者の受付フロー（個人情報入力→相談→アンケート）を管理します</p>
+          <p className="text-sm text-muted-foreground mt-0.5">依頼者の受付フロー（個人情報入力 → 相談 → SF登録 → アンケート）を管理します</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" onClick={handleDownloadCSV} className="gap-2 text-sm">
             <Download className="h-4 w-4" />
             CSV出力
           </Button>
-          <Button onClick={handleCreateSession} disabled={createSession.isPending} className="gap-2 text-sm">
-            <Plus className="h-4 w-4" />
+          <Button
+            onClick={() => createSession.mutate()}
+            disabled={createSession.isPending}
+            className="gap-2 text-sm bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
+          >
+            {createSession.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
             受付URLを発行
           </Button>
         </div>
@@ -132,156 +224,316 @@ export default function IntakeSessions() {
           受付フローの使い方
         </h3>
         <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-          <li>「受付URLを発行」ボタンを押してURLを生成（自動でクリップボードにコピー）</li>
-          <li>URLをタブレット・QRコードで依頼者に渡す → 依頼者が個人情報を自己入力</li>
-          <li>相談終了後、一覧の「相談完了」ボタンを押す → 依頼者の画面が自動でアンケートに切り替わる</li>
-          <li>アンケート完了後、「Salesforceコピー」ボタンで個人情報をコピーしてSalesforceに貼り付け</li>
+          <li>「受付URLを発行」→ URLをタブレット等で依頼者に渡す</li>
+          <li>依頼者が案件種別・個人情報・相手方情報を自己入力</li>
+          <li>相談終了後、「相談完了 → SF登録へ」ボタンを押す</li>
+          <li>「Salesforceフォームを開く」ボタンで情報が自動入力されたSFフォームが開く</li>
+          <li>SF側で確認・送信後、「送信完了を記録」ボタンを押す → 依頼者画面がアンケートに切り替わる</li>
         </ol>
       </div>
 
-      <div className="flex gap-4">
-        {/* 一覧 */}
-        <div className="flex-1 min-w-0 space-y-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="氏名・メールで検索"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+      {/* 検索 */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="氏名・電話番号・メールで検索"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
 
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            {isLoading ? (
-              <div className="p-8 text-center text-muted-foreground">読み込み中...</div>
-            ) : !sessions || sessions.length === 0 ? (
-              <div className="p-12 text-center">
-                <UserCheck className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">受付データがありません</p>
-                <p className="text-xs text-muted-foreground mt-1">「受付URLを発行」ボタンから開始してください</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {sessions.map((s) => (
-                  <div
-                    key={s.id}
-                    onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
-                    className={`p-4 cursor-pointer transition-colors ${selectedId === s.id ? "bg-primary/5" : "hover:bg-muted/30"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
+      {/* セッション一覧 */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : sessions.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>受付データがありません</p>
+          <p className="text-sm mt-1">「受付URLを発行」ボタンから開始してください</p>
+        </div>
+      ) : (
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="divide-y divide-border">
+            {(sessions as Session[]).map((s) => {
+              const cfg = STATUS_CONFIG[s.status] ?? { label: s.status, color: "bg-slate-100 text-slate-600" };
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => { setSelectedSession(s); setDialogOpen(true); }}
+                  className="w-full p-4 text-left hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="bg-muted rounded-full p-2 shrink-0">
+                        {s.caseCategory === "with_opponent" ? (
+                          <Users className="h-4 w-4 text-blue-600" />
+                        ) : s.caseCategory === "no_opponent" ? (
+                          <UserX className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-foreground text-sm">
-                            {s.name || <span className="text-muted-foreground italic">未入力</span>}
-                          </span>
-                          {s.nameKana && <span className="text-xs text-muted-foreground">{s.nameKana}</span>}
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_LABELS[s.status]?.color}`}>
-                            {STATUS_LABELS[s.status]?.label ?? s.status}
-                          </span>
-                          {s.exportedToSalesforce && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                              SF出力済
+                        <p className="font-medium text-foreground text-sm truncate">
+                          {s.clientName ?? <span className="text-muted-foreground italic">（未入力）</span>}
+                          {s.clientNameKana && (
+                            <span className="text-xs text-muted-foreground ml-2">{s.clientNameKana}</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {s.caseType ?? (s.caseCategory === "with_opponent" ? "相手方あり" : s.caseCategory === "no_opponent" ? "相手方なし" : "種別未選択")}
+                          {" · "}
+                          {new Date(s.createdAt).toLocaleDateString("ja-JP", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{cfg.label}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 詳細・操作ダイアログ */}
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setSelectedSession(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedSession && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-lg">
+                  <UserCheck className="h-5 w-5 text-[#0d2a6e]" />
+                  {selectedSession.clientName ?? "（未入力）"} 様
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-5 pt-2">
+                {/* ステータス */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_CONFIG[selectedSession.status]?.color}`}>
+                    {STATUS_CONFIG[selectedSession.status]?.label ?? selectedSession.status}
+                  </span>
+                  {selectedSession.caseType && (
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">{selectedSession.caseType}</span>
+                  )}
+                  {selectedSession.caseCategory && (
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+                      {selectedSession.caseCategory === "with_opponent" ? "相手方あり" : "相手方なし（破産等）"}
+                    </span>
+                  )}
+                </div>
+
+                {/* 受付URL */}
+                <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground truncate flex-1">
+                    {window.location.origin}/intake/{selectedSession.sessionToken}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0 h-7 px-2"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(`${window.location.origin}/intake/${selectedSession.sessionToken}`);
+                      toast.success("URLをコピーしました");
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                {/* 依頼者情報 */}
+                <InfoSection title="依頼者情報" items={[
+                  ["氏名", selectedSession.clientName],
+                  ["ふりがな", selectedSession.clientNameKana],
+                  ["生年月日", selectedSession.clientBirthDate ? formatDate(selectedSession.clientBirthDate) : null],
+                  ["郵便番号", selectedSession.clientPostalCode],
+                  ["住所", selectedSession.clientAddress],
+                  ["電話（自宅）", selectedSession.clientPhone],
+                  ["携帯電話", selectedSession.clientMobile],
+                  ["メール", selectedSession.clientEmail],
+                  ["職業", selectedSession.clientOccupation],
+                  ["来所のきっかけ", selectedSession.clientReferrer],
+                  ["相談概要", selectedSession.consultationReason],
+                ]} />
+
+                {/* 相手方情報 */}
+                {selectedSession.caseCategory === "with_opponent" && (
+                  <InfoSection title="相手方情報" items={[
+                    ["依頼者との関係", selectedSession.opponentRelation],
+                    ["氏名", selectedSession.opponentName],
+                    ["ふりがな", selectedSession.opponentNameKana],
+                    ["郵便番号", selectedSession.opponentPostalCode],
+                    ["住所", selectedSession.opponentAddress],
+                    ["電話番号", selectedSession.opponentPhone],
+                  ]} />
+                )}
+
+                {/* タイムライン */}
+                <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-semibold text-slate-600">タイムライン</p>
+                  {[
+                    { label: "受付開始", time: selectedSession.createdAt },
+                    { label: "情報入力完了", time: selectedSession.intakeCompletedAt },
+                    { label: "相談完了", time: selectedSession.consultationCompletedAt },
+                    { label: "アンケート完了", time: selectedSession.surveyCompletedAt },
+                  ].map(({ label, time }) => {
+                    const t = formatTime(time);
+                    if (!t) return null;
+                    return (
+                      <div key={label} className="flex items-center gap-2 text-xs">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                        <span className="text-slate-500">{label}:</span>
+                        <span className="text-slate-700 font-medium">{formatDate(time as Date)} {t}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* アクションボタン */}
+                <div className="border-t border-border pt-4 space-y-3">
+
+                  {/* 相談完了ボタン */}
+                  {(selectedSession.status === "waiting" || selectedSession.status === "consulting") && (
+                    <Button
+                      onClick={() => completeConsultation.mutate({ token: selectedSession.sessionToken })}
+                      disabled={completeConsultation.isPending}
+                      className="w-full gap-2 bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
+                    >
+                      {completeConsultation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      相談完了 → Salesforce登録へ
+                    </Button>
+                  )}
+
+                  {/* Salesforce登録（sf_pending時） */}
+                  {selectedSession.status === "sf_pending" && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-slate-700">Salesforceへ登録</p>
+                      {!sfOrgId && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                          ⚠ Salesforce組織IDが未設定です。設定画面（サイドバー「設定」）でSalesforce組織IDを入力してください。
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-500">
+                        ボタンを押すとSalesforceのWeb-to-Leadフォームが開き、情報が自動入力されます。内容を確認して送信してください。
+                      </p>
+
+                      {/* 依頼者 */}
+                      <div className="bg-blue-50 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-blue-800">依頼者をSalesforceに登録</p>
+                          {selectedSession.sfClientSentAt && (
+                            <span className="text-xs text-emerald-600 flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />送信済み {formatDate(selectedSession.sfClientSentAt)}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                          {s.phone && <span>{s.phone}</span>}
-                          {s.mobile && <span>{s.mobile}</span>}
-                          {s.email && <span className="truncate max-w-[180px]">{s.email}</span>}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(s.createdAt).toLocaleDateString("ja-JP", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* 受付URLコピー */}
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const url = `${window.location.origin}/intake/${s.sessionToken}`;
-                            await navigator.clipboard.writeText(url);
-                            toast.success("受付URLをコピーしました");
-                          }}
-                          className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                          title="受付URLをコピー"
+                        <Button
+                          onClick={() => openSfForm(selectedSession, "client")}
+                          variant="outline"
+                          className="w-full gap-2 border-blue-300 text-blue-700 hover:bg-blue-100"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
-                        {/* 相談完了ボタン */}
-                        {(s.status === "waiting" || s.status === "consulting") && (
+                          <ExternalLink className="h-4 w-4" />
+                          依頼者のSalesforceフォームを開く
+                        </Button>
+                        {!selectedSession.sfClientSentAt && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={(e) => { e.stopPropagation(); handleCompleteConsultation(s.sessionToken); }}
-                            disabled={completeConsultation.isPending}
-                            className="text-xs h-7 gap-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                            variant="ghost"
+                            onClick={() => markSfSent.mutate({ token: selectedSession.sessionToken, type: "client" })}
+                            disabled={markSfSent.isPending}
+                            className="w-full text-xs text-blue-600 hover:text-blue-800"
                           >
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            相談完了
+                            <Send className="h-3 w-3 mr-1" />
+                            依頼者の送信完了を記録する
                           </Button>
                         )}
                       </div>
+
+                      {/* 相手方（with_opponentのみ） */}
+                      {selectedSession.caseCategory === "with_opponent" && (
+                        <div className="bg-amber-50 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-amber-800">相手方をSalesforceに登録</p>
+                            {selectedSession.sfOpponentSentAt && (
+                              <span className="text-xs text-emerald-600 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />送信済み {formatDate(selectedSession.sfOpponentSentAt)}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            onClick={() => openSfForm(selectedSession, "opponent")}
+                            variant="outline"
+                            className="w-full gap-2 border-amber-300 text-amber-700 hover:bg-amber-100"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            相手方のSalesforceフォームを開く
+                          </Button>
+                          {!selectedSession.sfOpponentSentAt && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => markSfSent.mutate({ token: selectedSession.sessionToken, type: "opponent" })}
+                              disabled={markSfSent.isPending}
+                              className="w-full text-xs text-amber-600 hover:text-amber-800"
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              相手方の送信完了を記録する
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* まとめて完了 */}
+                      <Button
+                        onClick={() => markSfSent.mutate({ token: selectedSession.sessionToken, type: "both" })}
+                        disabled={markSfSent.isPending}
+                        className="w-full gap-2"
+                        variant="outline"
+                      >
+                        {markSfSent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                        すべて送信完了 → アンケートへ進む
+                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                  )}
 
-        {/* 詳細パネル（選択時） */}
-        {selectedSession && (
-          <div className="w-80 shrink-0">
-            <div className="bg-card rounded-xl border border-border p-5 space-y-4 sticky top-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">詳細情報</h3>
-                <button onClick={() => setSelectedId(null)} className="text-xs text-muted-foreground hover:text-foreground">閉じる</button>
-              </div>
-
-              <div className="space-y-2">
-                {SF_FIELDS.map((f) => {
-                  const val = (selectedSession as any)[f.key];
-                  if (!val) return null;
-                  const str = val instanceof Date ? val.toLocaleDateString("ja-JP") : String(val);
-                  return (
-                    <div key={f.key}>
-                      <p className="text-xs text-muted-foreground">{f.label}</p>
-                      <p className="text-sm text-foreground font-medium">{str}</p>
+                  {/* 完了済み */}
+                  {(selectedSession.status === "survey" || selectedSession.status === "completed") && (
+                    <div className="bg-emerald-50 rounded-xl p-4 text-center space-y-1">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                      <p className="text-sm font-medium text-emerald-800">Salesforce登録・アンケートが完了しています</p>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
-              {/* タイムライン */}
-              <div className="border-t border-border pt-3 space-y-1.5">
-                <p className="text-xs font-semibold text-muted-foreground">タイムライン</p>
-                {[
-                  { label: "受付開始", time: selectedSession.createdAt },
-                  { label: "情報入力完了", time: selectedSession.intakeCompletedAt },
-                  { label: "相談完了", time: selectedSession.consultationCompletedAt },
-                  { label: "アンケート完了", time: selectedSession.surveyCompletedAt },
-                ].map(({ label, time }) => time && (
-                  <div key={label} className="flex items-center gap-2 text-xs">
-                    <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="text-muted-foreground">{label}:</span>
-                    <span className="text-foreground">{new Date(time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Salesforceコピーボタン */}
-              <Button
-                onClick={() => handleCopySalesforce(selectedSession)}
-                className="w-full gap-2 text-sm"
-                variant="outline"
-              >
-                <Copy className="h-4 w-4" />
-                Salesforce用データをコピー
-              </Button>
-            </div>
+function InfoSection({ title, items }: { title: string; items: [string, string | null | undefined][] }) {
+  const filtered = items.filter(([, v]) => v);
+  if (filtered.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-1">{title}</h3>
+      <div className="space-y-1.5">
+        {filtered.map(([label, value]) => (
+          <div key={label} className="flex gap-3">
+            <span className="text-xs text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
+            <span className="text-sm text-foreground break-all">{value}</span>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

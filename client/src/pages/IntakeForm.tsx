@@ -3,258 +3,513 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Clock, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Scale,
+  Users,
+  UserX,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
-import { toast } from "sonner";
 
 const LOGO_MARK = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-mark_b1e753e6.png";
 const LOGO_TEXT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-text_c0ce50d8.png";
 
+type CaseCategory = "with_opponent" | "no_opponent";
+
+const CASE_TYPES_WITH_OPPONENT = [
+  "離婚・男女問題", "交通事故", "債権回収", "労働問題（解雇・未払い賃金）",
+  "損害賠償請求", "不動産トラブル", "相続争い（遺産分割）", "刑事事件", "その他",
+];
+const CASE_TYPES_NO_OPPONENT = [
+  "自己破産", "個人再生", "任意整理", "相続手続き（遺産整理）",
+  "遺言書作成", "成年後見", "会社設立・法人手続き", "その他",
+];
+
+type FormData = {
+  caseCategory: CaseCategory | "";
+  caseType: string;
+  clientName: string;
+  clientNameKana: string;
+  clientBirthDate: string;
+  clientPostalCode: string;
+  clientAddress: string;
+  clientPhone: string;
+  clientMobile: string;
+  clientEmail: string;
+  clientOccupation: string;
+  clientReferrer: string;
+  consultationReason: string;
+  opponentName: string;
+  opponentNameKana: string;
+  opponentPostalCode: string;
+  opponentAddress: string;
+  opponentPhone: string;
+  opponentRelation: string;
+};
+
+const INITIAL: FormData = {
+  caseCategory: "", caseType: "",
+  clientName: "", clientNameKana: "", clientBirthDate: "",
+  clientPostalCode: "", clientAddress: "",
+  clientPhone: "", clientMobile: "", clientEmail: "",
+  clientOccupation: "", clientReferrer: "", consultationReason: "",
+  opponentName: "", opponentNameKana: "", opponentPostalCode: "",
+  opponentAddress: "", opponentPhone: "", opponentRelation: "",
+};
+
+const Header = () => (
+  <header className="bg-[#0d2a6e] text-white px-4 py-3 sticky top-0 z-10 shadow-md">
+    <div className="max-w-lg mx-auto flex items-center gap-3">
+      <img src={LOGO_MARK} alt="" className="h-8 w-auto brightness-0 invert" />
+      <div>
+        <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-4 w-auto brightness-0 invert" />
+        <p className="text-xs text-blue-200 mt-0.5">ご相談者様 情報入力フォーム</p>
+      </div>
+    </div>
+  </header>
+);
+
 export default function IntakeForm() {
   const { token } = useParams<{ token: string }>();
-  const [, setLocation] = useLocation();
+  const [, navigate] = useLocation();
+  const [step, setStep] = useState(0); // 0=案件種別, 1=依頼者, 2=相手方, 3=確認, 4=待機
+  const [form, setForm] = useState<FormData>(INITIAL);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [submitted, setSubmitted] = useState(false);
 
-  const { data: session, isLoading, refetch } = trpc.intake.getByToken.useQuery(
+  const { data: session, isLoading } = trpc.intake.getByToken.useQuery(
     { token: token ?? "" },
-    { enabled: !!token, refetchInterval: 3000 } // 3秒ごとにポーリング
+    { enabled: !!token, refetchInterval: submitted ? 3000 : false }
   );
 
-  // ステータスが survey になったらアンケートへ遷移
+  const submitIntake = trpc.intake.submitIntake.useMutation();
+
+  // 相談完了後にアンケートへ遷移
   useEffect(() => {
-    if (session?.status === "survey") {
-      setLocation(`/intake/${token}/survey`);
+    if (submitted && session?.status === "survey") {
+      navigate(`/intake/${token}/survey`);
     }
-  }, [session?.status, token, setLocation]);
+  }, [submitted, session?.status, token, navigate]);
 
-  if (!token) return <div className="p-8 text-center text-muted-foreground">無効なURLです</div>;
-  if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
-  if (!session) return <div className="p-8 text-center text-muted-foreground">セッションが見つかりません</div>;
-
-  if (session.status === "waiting" || session.status === "consulting") {
-    return <WaitingScreen name={session.name} />;
+  if (!token || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0d2a6e]" />
+      </div>
+    );
   }
 
-  if (session.status === "completed") {
+  if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
-          <p className="text-lg font-semibold text-foreground">すべての手続きが完了しました</p>
-          <p className="text-sm text-muted-foreground">ご協力ありがとうございました。</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center p-6">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-3" />
+          <p className="font-medium">無効なURLです</p>
+          <p className="text-sm text-muted-foreground mt-1">スタッフにお声がけください。</p>
         </div>
       </div>
     );
   }
 
-  return <IntakeFormFields token={token} />;
-}
+  // 既に送信済み（待機中・相談中）
+  if (!submitted && (session.status === "waiting" || session.status === "consulting" || session.status === "sf_pending")) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <WaitingScreen clientName={session.clientName} />
+      </div>
+    );
+  }
 
-// ─── 個人情報入力フォーム ──────────────────────────────────────────────────────
+  if (session.status === "completed") {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <div className="flex items-center justify-center min-h-[70vh]">
+          <div className="text-center space-y-3">
+            <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
+            <p className="text-lg font-semibold">すべての手続きが完了しました</p>
+            <p className="text-sm text-muted-foreground">ご協力ありがとうございました。</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-function IntakeFormFields({ token }: { token: string }) {
-  const [form, setForm] = useState({
-    nameKana: "",
-    name: "",
-    birthDate: "",
-    postalCode: "",
-    address: "",
-    phone: "",
-    mobile: "",
-    email: "",
-    occupation: "",
-    referrer: "",
-    consultationReason: "",
-  });
+  const setField = (key: keyof FormData, val: string) => {
+    setForm((f) => ({ ...f, [key]: val }));
+    setErrors((e) => ({ ...e, [key]: "" }));
+  };
 
-  const submitIntake = trpc.intake.submitIntake.useMutation();
-
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const validateClient = () => {
+    const e: Partial<Record<keyof FormData, string>> = {};
+    if (!form.clientName.trim()) e.clientName = "氏名は必須です";
+    if (!form.clientNameKana.trim()) e.clientNameKana = "ふりがなは必須です";
+    if (!form.clientPhone.trim() && !form.clientMobile.trim()) e.clientPhone = "電話番号を少なくとも1つ入力してください";
+    if (form.clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.clientEmail)) e.clientEmail = "メールアドレスの形式が正しくありません";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      toast.error("お名前を入力してください");
-      return;
-    }
     try {
-      await submitIntake.mutateAsync({ token, ...form });
+      await submitIntake.mutateAsync({
+        token: token ?? "",
+        caseCategory: form.caseCategory as CaseCategory,
+        caseType: form.caseType || undefined,
+        clientName: form.clientName,
+        clientNameKana: form.clientNameKana || undefined,
+        clientBirthDate: form.clientBirthDate || undefined,
+        clientPostalCode: form.clientPostalCode || undefined,
+        clientAddress: form.clientAddress || undefined,
+        clientPhone: form.clientPhone || undefined,
+        clientMobile: form.clientMobile || undefined,
+        clientEmail: form.clientEmail || undefined,
+        clientOccupation: form.clientOccupation || undefined,
+        clientReferrer: form.clientReferrer || undefined,
+        consultationReason: form.consultationReason || undefined,
+        opponentName: form.opponentName || undefined,
+        opponentNameKana: form.opponentNameKana || undefined,
+        opponentPostalCode: form.opponentPostalCode || undefined,
+        opponentAddress: form.opponentAddress || undefined,
+        opponentPhone: form.opponentPhone || undefined,
+        opponentRelation: form.opponentRelation || undefined,
+      });
+      setSubmitted(true);
+      setStep(4);
     } catch {
-      toast.error("送信に失敗しました。もう一度お試しください。");
+      alert("送信に失敗しました。スタッフにお声がけください。");
     }
   };
 
+  const caseTypes = form.caseCategory === "with_opponent" ? CASE_TYPES_WITH_OPPONENT : CASE_TYPES_NO_OPPONENT;
+  const hasOpponent = form.caseCategory === "with_opponent";
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* ヘッダー */}
-      <div className="bg-primary text-primary-foreground py-4 px-6">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <img src={LOGO_MARK} alt="ロゴ" className="h-8 w-auto brightness-0 invert" />
-          <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-6 w-auto brightness-0 invert" />
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      <Header />
+      <div className="max-w-lg mx-auto px-4 py-6">
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">ご相談者情報の入力</h1>
-          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-            法律相談の前に、以下の項目をご入力ください。<br />
-            入力いただいた情報は、相談業務にのみ使用いたします。
-          </p>
-        </div>
+        {/* ── ステップ0: 案件種別選択 ── */}
+        {step === 0 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">ご相談の内容を教えてください</h2>
+              <p className="text-sm text-slate-500 mt-1">当てはまる方をお選びください</p>
+            </div>
 
-        {/* 基本情報 */}
-        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground border-b border-border pb-2">基本情報</h2>
+            <div className="grid gap-4">
+              <button
+                onClick={() => { setField("caseCategory", "with_opponent"); setStep(1); }}
+                className="bg-white border-2 border-slate-200 hover:border-[#0d2a6e] rounded-2xl p-5 text-left transition-all hover:shadow-md group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="bg-blue-50 rounded-xl p-3 group-hover:bg-blue-100 transition-colors">
+                    <Users className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-base">相手方がいる</p>
+                    <p className="text-sm text-slate-500 mt-1">離婚・交通事故・債権回収・労働問題・損害賠償など</p>
+                  </div>
+                </div>
+              </button>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="nameKana" className="text-sm">ふりがな</Label>
-            <Input id="nameKana" placeholder="あさひ たろう" value={form.nameKana} onChange={set("nameKana")} />
+              <button
+                onClick={() => { setField("caseCategory", "no_opponent"); setStep(1); }}
+                className="bg-white border-2 border-slate-200 hover:border-[#0d2a6e] rounded-2xl p-5 text-left transition-all hover:shadow-md group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="bg-emerald-50 rounded-xl p-3 group-hover:bg-emerald-100 transition-colors">
+                    <UserX className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-base">相手方がいない</p>
+                    <p className="text-sm text-slate-500 mt-1">破産・相続・遺言・成年後見・会社設立など</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-4 flex gap-3">
+              <Scale className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">ご入力いただいた情報は、弁護士業務のみに使用し、適切に管理いたします。</p>
+            </div>
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-sm">
-              お名前 <span className="text-accent text-xs">※必須</span>
-            </Label>
-            <Input id="name" placeholder="朝日 太郎" value={form.name} onChange={set("name")} />
+        {/* ── ステップ1: 依頼者情報 ── */}
+        {step === 1 && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setStep(0)} className="text-slate-400 hover:text-slate-600">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">あなたの情報を入力してください</h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {hasOpponent ? "ステップ 1 / 3" : "ステップ 1 / 2"}
+                </p>
+              </div>
+            </div>
+
+            {/* 案件種別 */}
+            <div className="bg-white rounded-2xl p-5 space-y-3 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">ご相談の種別（任意）</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {caseTypes.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setField("caseType", form.caseType === t ? "" : t)}
+                    className={`text-xs py-2 px-3 rounded-lg border text-left transition-colors ${
+                      form.caseType === t
+                        ? "border-[#0d2a6e] bg-[#0d2a6e]/5 text-[#0d2a6e] font-medium"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 基本情報 */}
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">基本情報</h3>
+              <Field label="お名前" required error={errors.clientName}>
+                <Input value={form.clientName} onChange={(e) => setField("clientName", e.target.value)} placeholder="朝日 太郎" className={errors.clientName ? "border-destructive" : ""} />
+              </Field>
+              <Field label="ふりがな" required error={errors.clientNameKana}>
+                <Input value={form.clientNameKana} onChange={(e) => setField("clientNameKana", e.target.value)} placeholder="あさひ たろう" className={errors.clientNameKana ? "border-destructive" : ""} />
+              </Field>
+              <Field label="生年月日">
+                <Input type="date" value={form.clientBirthDate} onChange={(e) => setField("clientBirthDate", e.target.value)} />
+              </Field>
+              <Field label="ご職業">
+                <Input value={form.clientOccupation} onChange={(e) => setField("clientOccupation", e.target.value)} placeholder="会社員、自営業、主婦など" />
+              </Field>
+            </div>
+
+            {/* 住所 */}
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">ご住所</h3>
+              <Field label="郵便番号">
+                <Input value={form.clientPostalCode} onChange={(e) => setField("clientPostalCode", e.target.value)} placeholder="530-0001" maxLength={8} className="max-w-[160px]" />
+              </Field>
+              <Field label="住所">
+                <Input value={form.clientAddress} onChange={(e) => setField("clientAddress", e.target.value)} placeholder="大阪府大阪市北区..." />
+              </Field>
+            </div>
+
+            {/* 連絡先 */}
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">ご連絡先</h3>
+              <Field label="電話番号（自宅・固定）" error={errors.clientPhone}>
+                <Input type="tel" value={form.clientPhone} onChange={(e) => setField("clientPhone", e.target.value)} placeholder="06-0000-0000" className={errors.clientPhone ? "border-destructive" : ""} />
+                {errors.clientPhone && <p className="text-xs text-destructive mt-1">{errors.clientPhone}</p>}
+              </Field>
+              <Field label="携帯電話">
+                <Input type="tel" value={form.clientMobile} onChange={(e) => setField("clientMobile", e.target.value)} placeholder="090-0000-0000" />
+              </Field>
+              <Field label="メールアドレス" error={errors.clientEmail}>
+                <Input type="email" value={form.clientEmail} onChange={(e) => setField("clientEmail", e.target.value)} placeholder="example@email.com" className={errors.clientEmail ? "border-destructive" : ""} />
+              </Field>
+            </div>
+
+            {/* その他 */}
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">その他</h3>
+              <Field label="当事務所をお知りになったきっかけ">
+                <Input value={form.clientReferrer} onChange={(e) => setField("clientReferrer", e.target.value)} placeholder="インターネット、知人の紹介など" />
+              </Field>
+              <Field label="ご相談の概要（任意）">
+                <Textarea value={form.consultationReason} onChange={(e) => setField("consultationReason", e.target.value)} placeholder="ご相談内容を簡単にお書きください" rows={3} />
+              </Field>
+            </div>
+
+            <Button
+              onClick={() => { if (!validateClient()) return; setStep(hasOpponent ? 2 : 3); }}
+              className="w-full h-12 text-base gap-2 bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
+            >
+              次へ <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="birthDate" className="text-sm">生年月日</Label>
-            <Input id="birthDate" type="date" value={form.birthDate} onChange={set("birthDate")} />
+        {/* ── ステップ2: 相手方情報 ── */}
+        {step === 2 && hasOpponent && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setStep(1)} className="text-slate-400 hover:text-slate-600">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">相手方の情報を入力してください</h2>
+                <p className="text-sm text-slate-500 mt-0.5">ステップ 2 / 3　（わかる範囲で構いません）</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+              わかる範囲でご記入ください。不明な項目は空欄で構いません。
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">相手方の基本情報</h3>
+              <Field label="相手方との関係">
+                <Input value={form.opponentRelation} onChange={(e) => setField("opponentRelation", e.target.value)} placeholder="元配偶者、加害者、雇用主など" />
+              </Field>
+              <Field label="相手方のお名前">
+                <Input value={form.opponentName} onChange={(e) => setField("opponentName", e.target.value)} placeholder="山田 花子" />
+              </Field>
+              <Field label="ふりがな">
+                <Input value={form.opponentNameKana} onChange={(e) => setField("opponentNameKana", e.target.value)} placeholder="やまだ はなこ" />
+              </Field>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">相手方の連絡先</h3>
+              <Field label="郵便番号">
+                <Input value={form.opponentPostalCode} onChange={(e) => setField("opponentPostalCode", e.target.value)} placeholder="530-0001" maxLength={8} className="max-w-[160px]" />
+              </Field>
+              <Field label="住所">
+                <Input value={form.opponentAddress} onChange={(e) => setField("opponentAddress", e.target.value)} placeholder="大阪府..." />
+              </Field>
+              <Field label="電話番号">
+                <Input type="tel" value={form.opponentPhone} onChange={(e) => setField("opponentPhone", e.target.value)} placeholder="06-0000-0000" />
+              </Field>
+            </div>
+
+            <Button onClick={() => setStep(3)} className="w-full h-12 text-base gap-2 bg-[#0d2a6e] hover:bg-[#0d2a6e]/90">
+              次へ <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="occupation" className="text-sm">ご職業</Label>
-            <Input id="occupation" placeholder="会社員・自営業・主婦 など" value={form.occupation} onChange={set("occupation")} />
-          </div>
-        </div>
+        {/* ── ステップ3: 確認 ── */}
+        {step === 3 && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setStep(hasOpponent ? 2 : 1)} className="text-slate-400 hover:text-slate-600">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">入力内容の確認</h2>
+                <p className="text-sm text-slate-500 mt-0.5">内容をご確認の上、送信してください</p>
+              </div>
+            </div>
 
-        {/* 住所 */}
-        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground border-b border-border pb-2">ご住所</h2>
+            <ConfirmSection title="あなたの情報" items={[
+              ["ご相談種別", form.caseType || (hasOpponent ? "相手方あり" : "相手方なし")],
+              ["お名前", form.clientName],
+              ["ふりがな", form.clientNameKana],
+              ["生年月日", form.clientBirthDate],
+              ["住所", [form.clientPostalCode, form.clientAddress].filter(Boolean).join(" ")],
+              ["電話（自宅）", form.clientPhone],
+              ["携帯電話", form.clientMobile],
+              ["メール", form.clientEmail],
+              ["職業", form.clientOccupation],
+              ["来所のきっかけ", form.clientReferrer],
+              ["相談概要", form.consultationReason],
+            ]} />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="postalCode" className="text-sm">郵便番号</Label>
-            <Input id="postalCode" placeholder="000-0000" value={form.postalCode} onChange={set("postalCode")} className="max-w-[160px]" />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="address" className="text-sm">住所</Label>
-            <Input id="address" placeholder="都道府県・市区町村・番地" value={form.address} onChange={set("address")} />
-          </div>
-        </div>
-
-        {/* 連絡先 */}
-        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground border-b border-border pb-2">ご連絡先</h2>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-sm">電話番号（自宅）</Label>
-            <Input id="phone" type="tel" placeholder="00-0000-0000" value={form.phone} onChange={set("phone")} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="mobile" className="text-sm">携帯電話</Label>
-            <Input id="mobile" type="tel" placeholder="000-0000-0000" value={form.mobile} onChange={set("mobile")} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-sm">メールアドレス</Label>
-            <Input id="email" type="email" placeholder="example@email.com" value={form.email} onChange={set("email")} />
-          </div>
-        </div>
-
-        {/* 紹介者・相談概要 */}
-        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground border-b border-border pb-2">その他</h2>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="referrer" className="text-sm">紹介者・来所のきっかけ</Label>
-            <Input id="referrer" placeholder="例：〇〇様のご紹介、ホームページを見て" value={form.referrer} onChange={set("referrer")} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="consultationReason" className="text-sm">ご相談の概要（任意）</Label>
-            <Textarea
-              id="consultationReason"
-              placeholder="ご相談内容の概要をご記入ください（弁護士が事前に確認します）"
-              value={form.consultationReason}
-              onChange={set("consultationReason")}
-              rows={3}
-            />
-          </div>
-        </div>
-
-        <div className="pb-8">
-          <Button
-            onClick={handleSubmit}
-            disabled={submitIntake.isPending || !form.name.trim()}
-            className="w-full h-12 text-base font-medium"
-          >
-            {submitIntake.isPending ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" />送信中...</>
-            ) : (
-              "入力内容を送信する"
+            {hasOpponent && (
+              <ConfirmSection title="相手方の情報" items={[
+                ["関係", form.opponentRelation],
+                ["お名前", form.opponentName],
+                ["ふりがな", form.opponentNameKana],
+                ["住所", [form.opponentPostalCode, form.opponentAddress].filter(Boolean).join(" ")],
+                ["電話番号", form.opponentPhone],
+              ]} emptyMessage="相手方情報は入力されていません" />
             )}
-          </Button>
-          <p className="text-xs text-muted-foreground text-center mt-3">
-            入力いただいた個人情報は、当事務所の個人情報保護方針に基づき適切に管理いたします。
-          </p>
-        </div>
+
+            <Button
+              onClick={handleSubmit}
+              disabled={submitIntake.isPending}
+              className="w-full h-12 text-base bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
+            >
+              {submitIntake.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />送信中...</> : "この内容で送信する"}
+            </Button>
+            <p className="text-xs text-center text-slate-400">送信後は修正できません。内容をよくご確認ください。</p>
+          </div>
+        )}
+
+        {/* ── ステップ4: 待機画面 ── */}
+        {step === 4 && (
+          <WaitingScreen clientName={form.clientName} />
+        )}
       </div>
     </div>
   );
 }
 
-// ─── 相談待機画面 ──────────────────────────────────────────────────────────────
+// ── 共通コンポーネント ──────────────────────────────────────────
 
-function WaitingScreen({ name }: { name: string | null }) {
+function Field({ label, required, error, children }: {
+  label: string; required?: boolean; error?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-sm text-slate-700">
+        {label}{required && <span className="text-destructive ml-1">*</span>}
+      </Label>
+      {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function ConfirmSection({ title, items, emptyMessage }: {
+  title: string;
+  items: [string, string][];
+  emptyMessage?: string;
+}) {
+  const filtered = items.filter(([, v]) => v);
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 space-y-3">
+      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2">{title}</h3>
+      {filtered.length > 0 ? filtered.map(([label, value]) => (
+        <div key={label} className="flex gap-3">
+          <span className="text-xs text-slate-500 w-28 shrink-0 pt-0.5">{label}</span>
+          <span className="text-sm text-slate-800 break-all">{value}</span>
+        </div>
+      )) : (
+        <p className="text-sm text-slate-400">{emptyMessage ?? "入力なし"}</p>
+      )}
+    </div>
+  );
+}
+
+function WaitingScreen({ clientName }: { clientName: string | null }) {
   const [dots, setDots] = useState(".");
   useEffect(() => {
-    const interval = setInterval(() => {
-      setDots((d) => (d.length >= 3 ? "." : d + "."));
-    }, 600);
+    const interval = setInterval(() => setDots((d) => d.length >= 3 ? "." : d + "."), 600);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <div className="bg-primary text-primary-foreground py-4 px-6">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <img src={LOGO_MARK} alt="ロゴ" className="h-8 w-auto brightness-0 invert" />
-          <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-6 w-auto brightness-0 invert" />
-        </div>
+    <div className="flex flex-col items-center justify-center min-h-[65vh] text-center space-y-6 px-4">
+      <div className="bg-[#0d2a6e]/10 rounded-full p-6">
+        <Clock className="h-14 w-14 text-[#0d2a6e]" />
       </div>
-
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div className="text-center space-y-6 max-w-sm">
-          <div className="bg-primary/10 rounded-full p-6 inline-flex mx-auto">
-            <Clock className="h-14 w-14 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">
-              {name ? `${name} 様` : "ご相談者様"}
-            </h2>
-            <p className="text-base text-muted-foreground mt-2">
-              情報の送信が完了しました。
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              弁護士の準備ができましたら、<br />
-              この画面が自動的に切り替わります{dots}
-            </p>
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-left">
-            <p className="text-xs text-amber-800 leading-relaxed">
-              この画面はそのままにしておいてください。<br />
-              相談終了後、アンケートのご協力をお願いします。
-            </p>
-          </div>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800">
+          {clientName ? `${clientName} 様` : "ご相談者様"}
+        </h2>
+        <p className="text-slate-500 mt-2">情報の送信が完了しました</p>
+        <p className="text-sm text-slate-400 mt-1">
+          弁護士の準備ができましたら、<br />この画面が自動的に切り替わります{dots}
+        </p>
+      </div>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-sm w-full text-left">
+        <p className="text-xs text-amber-800 leading-relaxed">
+          この画面はそのままにしておいてください。<br />
+          相談終了後、アンケートのご協力をお願いします。
+        </p>
       </div>
     </div>
   );

@@ -22,15 +22,11 @@ import {
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  BarChart3,
-  Briefcase,
-  ClipboardList,
   LayoutDashboard,
   LogOut,
-  MessageSquare,
   PanelLeft,
+  Settings,
   UserCheck,
-  Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -43,156 +39,88 @@ const LOGO_TEXT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMC
 const menuItems = [
   { icon: LayoutDashboard, label: "ダッシュボード", path: "/" },
   { icon: UserCheck, label: "受付管理", path: "/intake-sessions" },
-  { icon: Briefcase, label: "事件一覧", path: "/cases" },
-  { icon: Users, label: "依頼者一覧", path: "/clients" },
-  { icon: ClipboardList, label: "チェックリスト", path: "/checklists" },
-  { icon: MessageSquare, label: "アンケート", path: "/survey" },
-  { icon: BarChart3, label: "アンケート管理", path: "/surveys" },
+  { icon: Settings, label: "設定", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 200;
-const MAX_WIDTH = 400;
+const MAX_WIDTH = 360;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
-
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
-  }, [sidebarWidth]);
-
-  if (loading) return <DashboardLayoutSkeleton />;
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-4">
-            <img src={LOGO_MARK} alt="朝日グループロゴ" className="h-20 w-auto" />
-            <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-10 w-auto" />
-          </div>
-          <div className="flex flex-col items-center gap-3">
-            <h1 className="text-xl font-semibold tracking-tight text-center text-foreground">
-              業務管理システム
-            </h1>
-            <p className="text-sm text-muted-foreground text-center">
-              ログインして続けてください。
-            </p>
-          </div>
-          <Button
-            onClick={() => { window.location.href = getLoginUrl(); }}
-            size="lg"
-            className="w-full"
-          >
-            ログイン
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
-        {children}
-      </DashboardLayoutContent>
-    </SidebarProvider>
-  );
-}
-
-function DashboardLayoutContent({
-  children,
-  setSidebarWidth,
-}: {
-  children: React.ReactNode;
-  setSidebarWidth: (width: number) => void;
-}) {
-  const { user, logout } = useAuth();
-  const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
-  const isCollapsed = state === "collapsed";
-  const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(DEFAULT_WIDTH);
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const [location, navigate] = useLocation();
   const isMobile = useIsMobile();
 
-  const activeMenuItem = menuItems.find(
-    (item) => item.path === location || (item.path !== "/" && location.startsWith(item.path))
-  );
-
   useEffect(() => {
-    if (isCollapsed) setIsResizing(false);
-  }, [isCollapsed]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-      const newWidth = e.clientX - sidebarLeft;
-      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) setSidebarWidth(newWidth);
-    };
-    const handleMouseUp = () => setIsResizing(false);
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
+    if (!loading && !isAuthenticated) {
+      window.location.href = getLoginUrl();
     }
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizing, setSidebarWidth]);
+  }, [loading, isAuthenticated]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = sidebarWidth;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging.current) return;
+    const delta = e.clientX - startX.current;
+    const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth.current + delta));
+    setSidebarWidth(newWidth);
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  if (loading) return <DashboardLayoutSkeleton />;
+  if (!isAuthenticated) return null;
 
   return (
-    <>
-      <div className="relative" ref={sidebarRef}>
-        <Sidebar collapsible="icon" className="border-r-0" disableTransition={isResizing}>
-          {/* ヘッダー：ロゴ */}
-          <SidebarHeader className="h-16 justify-center border-b border-sidebar-border">
-            <div className="flex items-center gap-3 px-2 w-full">
-              <button
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent rounded-lg transition-colors shrink-0"
-                aria-label="サイドバーを切り替え"
-              >
-                <PanelLeft className="h-4 w-4 text-sidebar-foreground/60" />
-              </button>
-              {!isCollapsed && (
-                <div className="flex items-center gap-2 min-w-0">
-                  <img src={LOGO_MARK} alt="ロゴ" className="h-7 w-auto shrink-0" />
-                  <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-5 w-auto min-w-0 object-contain brightness-0 invert" />
-                </div>
-              )}
-              {isCollapsed && (
-                <img src={LOGO_MARK} alt="ロゴ" className="h-7 w-auto shrink-0" />
-              )}
+    <SidebarProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-background">
+        <Sidebar
+          style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+          className="border-r border-border bg-card"
+        >
+          <SidebarHeader className="px-4 py-4 border-b border-border">
+            <div className="flex items-center gap-2">
+              <img src={LOGO_MARK} alt="朝日ロゴ" className="h-8 w-auto" />
+              <img src={LOGO_TEXT} alt="朝日弁護士法人" className="h-5 w-auto" />
             </div>
+            <p className="text-xs text-muted-foreground mt-1 pl-0.5">依頼者登録システム</p>
           </SidebarHeader>
 
-          {/* ナビゲーション */}
-          <SidebarContent className="gap-0 pt-2">
-            <SidebarMenu className="px-2 py-1">
+          <SidebarContent className="px-2 py-3">
+            <SidebarMenu>
               {menuItems.map((item) => {
-                const isActive =
-                  item.path === "/"
-                    ? location === "/"
-                    : location === item.path || location.startsWith(item.path + "/");
+                const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className="h-10 transition-all font-normal"
+                      onClick={() => navigate(item.path)}
+                      className={`gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
                     >
-                      <item.icon className={`h-4 w-4 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/70"}`} />
+                      <item.icon className="h-4 w-4 shrink-0" />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -201,57 +129,56 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
-          {/* フッター：ユーザー情報 */}
-          <SidebarFooter className="p-3 border-t border-sidebar-border">
+          <SidebarFooter className="border-t border-border p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-sidebar-accent/50 transition-colors w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-                  <Avatar className="h-9 w-9 border border-sidebar-border shrink-0">
-                    <AvatarFallback className="text-xs font-medium bg-sidebar-accent text-sidebar-accent-foreground">
-                      {user?.name?.charAt(0).toUpperCase() ?? "U"}
+                <button className="flex items-center gap-3 w-full rounded-lg px-3 py-2 hover:bg-muted transition-colors text-left">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+                      {user?.name?.charAt(0) ?? "?"}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none text-sidebar-foreground">
-                      {user?.name || "-"}
-                    </p>
-                    <p className="text-xs text-sidebar-foreground/60 truncate mt-1.5">
-                      {user?.email || "-"}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "スタッフ"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>ログアウト</span>
+                <DropdownMenuItem onClick={logout} className="gap-2 text-destructive focus:text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  ログアウト
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarFooter>
+
+          {/* リサイズハンドル */}
+          {!isMobile && (
+            <div
+              onMouseDown={handleMouseDown}
+              className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors"
+            />
+          )}
         </Sidebar>
 
-        {/* リサイズハンドル */}
-        <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
-          onMouseDown={() => { if (!isCollapsed) setIsResizing(true); }}
-          style={{ zIndex: 50 }}
-        />
+        <SidebarInset className="flex-1 flex flex-col overflow-hidden">
+          {isMobile && (
+            <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
+              <SidebarTrigger>
+                <PanelLeft className="h-5 w-5" />
+              </SidebarTrigger>
+              <div className="flex items-center gap-2">
+                <img src={LOGO_MARK} alt="" className="h-6 w-auto" />
+                <span className="text-sm font-semibold text-foreground">朝日弁護士法人</span>
+              </div>
+            </header>
+          )}
+          <main className="flex-1 overflow-y-auto p-6">
+            {children}
+          </main>
+        </SidebarInset>
       </div>
-
-      <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-3 backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg" />
-              <span className="text-sm font-medium text-foreground">
-                {activeMenuItem?.label ?? "メニュー"}
-              </span>
-            </div>
-          </div>
-        )}
-        <main className="flex-1 p-4 md:p-6">{children}</main>
-      </SidebarInset>
-    </>
+    </SidebarProvider>
   );
 }

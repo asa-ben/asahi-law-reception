@@ -1,26 +1,6 @@
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { eq, desc, like, or, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import {
-  Case,
-  Checklist,
-  Client,
-  InsertCase,
-  InsertChecklist,
-  InsertClient,
-  InsertIntakeSession,
-  InsertOpponent,
-  InsertSurveyResponse,
-  InsertUser,
-  Opponent,
-  SurveyResponse,
-  cases,
-  checklists,
-  clients,
-  intakeSessions,
-  opponents,
-  surveyResponses,
-  users,
-} from "../drizzle/schema";
+import { InsertUser, users, intakeSessions, surveyResponses, appSettings, InsertIntakeSession } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -37,41 +17,45 @@ export async function getDb() {
   return _db;
 }
 
-// ─── Users ───────────────────────────────────────────────────────────────────
+// ── Users ──────────────────────────────────────────────
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
-  if (!db) return;
+  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
 
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  const textFields = ["name", "email", "loginMethod"] as const;
+  try {
+    const values: InsertUser = { openId: user.openId };
+    const updateSet: Record<string, unknown> = {};
+    const textFields = ["name", "email", "loginMethod"] as const;
 
-  for (const field of textFields) {
-    const value = user[field];
-    if (value === undefined) continue;
-    const normalized = value ?? null;
-    values[field] = normalized;
-    updateSet[field] = normalized;
+    for (const field of textFields) {
+      const value = user[field];
+      if (value === undefined) continue;
+      const normalized = value ?? null;
+      values[field] = normalized;
+      updateSet[field] = normalized;
+    }
+
+    if (user.lastSignedIn !== undefined) {
+      values.lastSignedIn = user.lastSignedIn;
+      updateSet.lastSignedIn = user.lastSignedIn;
+    }
+    if (user.role !== undefined) {
+      values.role = user.role;
+      updateSet.role = user.role;
+    } else if (user.openId === ENV.ownerOpenId) {
+      values.role = "admin";
+      updateSet.role = "admin";
+    }
+    if (!values.lastSignedIn) values.lastSignedIn = new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  } catch (error) {
+    console.error("[Database] Failed to upsert user:", error);
+    throw error;
   }
-
-  if (user.lastSignedIn !== undefined) {
-    values.lastSignedIn = user.lastSignedIn;
-    updateSet.lastSignedIn = user.lastSignedIn;
-  }
-  if (user.role !== undefined) {
-    values.role = user.role;
-    updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
-  }
-
-  if (!values.lastSignedIn) values.lastSignedIn = new Date();
-  if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
@@ -81,263 +65,136 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ─── Cases ───────────────────────────────────────────────────────────────────
+// ── App Settings ────────────────────────────────────────
 
-export async function createCase(data: InsertCase): Promise<number> {
+export async function getSetting(key: string): Promise<string | null> {
   const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(cases).values(data);
-  return (result[0] as { insertId: number }).insertId;
+  if (!db) return null;
+  const result = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
+  return result[0]?.value ?? null;
 }
 
-export async function getCaseById(id: number) {
+export async function getAllSettings(): Promise<Record<string, string>> {
   const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(cases).where(eq(cases.id, id)).limit(1);
-  return result[0];
+  if (!db) return {};
+  const rows = await db.select().from(appSettings);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""]));
 }
 
-export async function updateCase(id: number, data: Partial<InsertCase>) {
+export async function setSetting(key: string, value: string): Promise<void> {
   const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  await db.update(cases).set(data).where(eq(cases.id, id));
+  if (!db) return;
+  await db.insert(appSettings).values({ key, value }).onDuplicateKeyUpdate({ set: { value } });
 }
 
-export async function listCases(search?: string, limit = 50, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  if (search) {
-    return db
-      .select()
-      .from(cases)
-      .where(
-        or(
-          like(cases.caseNumber, `%${search}%`),
-          like(cases.assignedLawyer, `%${search}%`),
-          like(cases.caseType, `%${search}%`)
-        )
-      )
-      .orderBy(desc(cases.createdAt))
-      .limit(limit)
-      .offset(offset);
-  }
-  return db.select().from(cases).orderBy(desc(cases.createdAt)).limit(limit).offset(offset);
-}
-
-export async function countCases() {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select().from(cases);
-  return result.length;
-}
-
-// ─── Clients ─────────────────────────────────────────────────────────────────
-
-export async function createClient(data: InsertClient): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(clients).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function getClientByCaseId(caseId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(clients).where(eq(clients.caseId, caseId)).limit(1);
-  return result[0];
-}
-
-export async function updateClient(id: number, data: Partial<InsertClient>) {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  await db.update(clients).set(data).where(eq(clients.id, id));
-}
-
-export async function listClients(search?: string, limit = 50, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  if (search) {
-    return db
-      .select()
-      .from(clients)
-      .where(or(like(clients.name, `%${search}%`), like(clients.nameKana, `%${search}%`)))
-      .orderBy(desc(clients.createdAt))
-      .limit(limit)
-      .offset(offset);
-  }
-  return db.select().from(clients).orderBy(desc(clients.createdAt)).limit(limit).offset(offset);
-}
-
-// ─── Opponents ───────────────────────────────────────────────────────────────
-
-export async function createOpponent(data: InsertOpponent): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(opponents).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function getOpponentByCaseId(caseId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(opponents).where(eq(opponents.caseId, caseId)).limit(1);
-  return result[0];
-}
-
-export async function updateOpponent(id: number, data: Partial<InsertOpponent>) {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  await db.update(opponents).set(data).where(eq(opponents.id, id));
-}
-
-// ─── Checklists ──────────────────────────────────────────────────────────────
-
-export async function createChecklist(data: InsertChecklist): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(checklists).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function getChecklistByCaseId(caseId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(checklists).where(eq(checklists.caseId, caseId)).limit(1);
-  return result[0];
-}
-
-export async function upsertChecklist(caseId: number, data: Partial<InsertChecklist>) {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const existing = await getChecklistByCaseId(caseId);
-  if (existing) {
-    await db.update(checklists).set(data).where(eq(checklists.caseId, caseId));
-  } else {
-    await db.insert(checklists).values({ caseId, ...data });
-  }
-}
-
-// ─── Survey Responses ────────────────────────────────────────────────────────
-
-export async function createSurveyResponse(data: InsertSurveyResponse): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(surveyResponses).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function listSurveyResponses(limit = 50, offset = 0, search?: string) {
-  const db = await getDb();
-  if (!db) return [];
-  if (search) {
-    return db
-      .select()
-      .from(surveyResponses)
-      .where(like(surveyResponses.freeComment, `%${search}%`))
-      .orderBy(desc(surveyResponses.submittedAt))
-      .limit(limit)
-      .offset(offset);
-  }
-  return db.select().from(surveyResponses).orderBy(desc(surveyResponses.submittedAt)).limit(limit).offset(offset);
-}
-
-export async function getSurveyResponsesByCaseId(caseId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(surveyResponses).where(eq(surveyResponses.caseId, caseId));
-}
-
-export async function updateSurveyResponse(id: number, data: Partial<InsertSurveyResponse>) {
-  const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  await db.update(surveyResponses).set(data).where(eq(surveyResponses.id, id));
-}
-
-export async function getSurveyStats() {
-  const db = await getDb();
-  if (!db) return { total: 0, avgSatisfaction: 0, highSatisfaction: 0, googleReviewShown: 0, distribution: {} as Record<number, number> };
-  const all = await db.select().from(surveyResponses);
-  const total = all.length;
-  const avgSatisfaction = total > 0 ? all.reduce((s, r) => s + r.satisfaction, 0) / total : 0;
-  const highSatisfaction = all.filter((r) => r.satisfaction >= 4).length;
-  const googleReviewShown = all.filter((r) => r.googleReviewShown).length;
-  const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const r of all) distribution[r.satisfaction] = (distribution[r.satisfaction] ?? 0) + 1;
-  return { total, avgSatisfaction: Math.round(avgSatisfaction * 10) / 10, highSatisfaction, googleReviewShown, distribution };
-}
-
-// ─── Intake Sessions ─────────────────────────────────────────────────────────
+// ── Intake Sessions ─────────────────────────────────────
 
 export async function createIntakeSession(token: string): Promise<number> {
   const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  const result = await db.insert(intakeSessions).values({ sessionToken: token, status: "intake" });
-  return (result[0] as { insertId: number }).insertId;
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(intakeSessions).values({ sessionToken: token });
+  return Number(result[0].insertId);
 }
 
 export async function getIntakeSessionByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(intakeSessions).where(eq(intakeSessions.sessionToken, token)).limit(1);
-  return result[0];
+  return result[0] ?? undefined;
 }
 
 export async function getIntakeSessionById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(intakeSessions).where(eq(intakeSessions.id, id)).limit(1);
-  return result[0];
+  return result[0] ?? undefined;
 }
 
-export async function updateIntakeSession(id: number, data: Partial<InsertIntakeSession>) {
+export async function updateIntakeSession(
+  token: string,
+  data: Partial<InsertIntakeSession>
+): Promise<void> {
   const db = await getDb();
-  if (!db) throw new Error("DB not available");
-  await db.update(intakeSessions).set(data).where(eq(intakeSessions.id, id));
+  if (!db) throw new Error("Database not available");
+  await db.update(intakeSessions).set(data).where(eq(intakeSessions.sessionToken, token));
 }
 
-export async function listIntakeSessions(limit = 50, offset = 0, search?: string) {
+export async function listIntakeSessions(opts?: {
+  search?: string;
+  status?: string;
+  limit?: number;
+}) {
   const db = await getDb();
   if (!db) return [];
-  if (search) {
-    return db
-      .select()
-      .from(intakeSessions)
-      .where(or(like(intakeSessions.name, `%${search}%`), like(intakeSessions.nameKana, `%${search}%`), like(intakeSessions.email, `%${search}%`)))
-      .orderBy(desc(intakeSessions.createdAt))
-      .limit(limit)
-      .offset(offset);
-  }
-  return db.select().from(intakeSessions).orderBy(desc(intakeSessions.createdAt)).limit(limit).offset(offset);
-}
+  const limit = opts?.limit ?? 50;
 
-// ─── Dashboard Stats ─────────────────────────────────────────────────────────
+  let query = db.select().from(intakeSessions).$dynamic();
+
+  if (opts?.search) {
+    const s = `%${opts.search}%`;
+    query = query.where(
+      or(
+        like(intakeSessions.clientName, s),
+        like(intakeSessions.clientEmail, s),
+        like(intakeSessions.clientPhone, s),
+        like(intakeSessions.clientMobile, s),
+      )
+    );
+  }
+
+  return query.orderBy(desc(intakeSessions.createdAt)).limit(limit);
+}
 
 export async function getDashboardStats() {
   const db = await getDb();
-  if (!db) return { totalCases: 0, ongoingCases: 0, totalClients: 0, surveyStats: { total: 0, avgSatisfaction: 0, highSatisfaction: 0 } };
-  const allCases = await db.select().from(cases);
-  const allClients = await db.select().from(clients);
-  const surveyStats = await getSurveyStats();
+  if (!db) return { total: 0, waiting: 0, sfPending: 0, completed: 0, todayCount: 0 };
+
+  const rows = await db.select().from(intakeSessions);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   return {
-    totalCases: allCases.length,
-    ongoingCases: allCases.filter((c) => c.status === "ongoing").length,
-    totalClients: allClients.length,
-    surveyStats,
+    total: rows.length,
+    waiting: rows.filter((r) => r.status === "waiting" || r.status === "consulting").length,
+    sfPending: rows.filter((r) => r.status === "sf_pending").length,
+    completed: rows.filter((r) => r.status === "completed").length,
+    todayCount: rows.filter((r) => new Date(r.createdAt) >= today).length,
   };
 }
 
-// ─── Case Detail (joined) ────────────────────────────────────────────────────
+// ── Survey Responses ────────────────────────────────────
 
-export async function getCaseDetail(caseId: number) {
+export async function createSurveyResponse(data: {
+  sessionId?: number;
+  satisfaction: number;
+  goodPoints?: string;
+  visitTrigger?: string;
+  visitTriggerOther?: string;
+  freeComment?: string;
+  googleReviewShown?: boolean;
+}): Promise<number> {
   const db = await getDb();
-  if (!db) return null;
-  const [caseData, clientData, opponentData, checklistData, surveyData] = await Promise.all([
-    getCaseById(caseId),
-    getClientByCaseId(caseId),
-    getOpponentByCaseId(caseId),
-    getChecklistByCaseId(caseId),
-    getSurveyResponsesByCaseId(caseId),
-  ]);
-  if (!caseData) return null;
-  return { case: caseData, client: clientData, opponent: opponentData, checklist: checklistData, surveys: surveyData };
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(surveyResponses).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function updateSurveyResponse(id: number, data: { googleReviewClicked?: boolean }): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(surveyResponses).set(data).where(eq(surveyResponses.id, id));
+}
+
+export async function getSurveyStats() {
+  const db = await getDb();
+  if (!db) return { total: 0, avgSatisfaction: 0, distribution: [0, 0, 0, 0, 0], reviewClicked: 0 };
+
+  const rows = await db.select().from(surveyResponses);
+  if (rows.length === 0) return { total: 0, avgSatisfaction: 0, distribution: [0, 0, 0, 0, 0], reviewClicked: 0 };
+
+  const distribution = [1, 2, 3, 4, 5].map((s) => rows.filter((r) => r.satisfaction === s).length);
+  const avgSatisfaction = rows.reduce((sum, r) => sum + r.satisfaction, 0) / rows.length;
+  const reviewClicked = rows.filter((r) => r.googleReviewClicked).length;
+
+  return { total: rows.length, avgSatisfaction: Math.round(avgSatisfaction * 10) / 10, distribution, reviewClicked };
 }
