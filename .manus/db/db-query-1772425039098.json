@@ -1,0 +1,121 @@
+{
+  "query": "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'intakeSessions' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'intakeSessions' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "sessionToken"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "caseCategory"
+    },
+    {
+      "COLUMN_NAME": "caseType"
+    },
+    {
+      "COLUMN_NAME": "clientName"
+    },
+    {
+      "COLUMN_NAME": "clientNameKana"
+    },
+    {
+      "COLUMN_NAME": "clientBirthDate"
+    },
+    {
+      "COLUMN_NAME": "clientPostalCode"
+    },
+    {
+      "COLUMN_NAME": "clientAddress"
+    },
+    {
+      "COLUMN_NAME": "clientPhone"
+    },
+    {
+      "COLUMN_NAME": "clientMobile"
+    },
+    {
+      "COLUMN_NAME": "clientEmail"
+    },
+    {
+      "COLUMN_NAME": "clientOccupation"
+    },
+    {
+      "COLUMN_NAME": "clientReferrer"
+    },
+    {
+      "COLUMN_NAME": "consultationReason"
+    },
+    {
+      "COLUMN_NAME": "opponentName"
+    },
+    {
+      "COLUMN_NAME": "opponentNameKana"
+    },
+    {
+      "COLUMN_NAME": "opponentPostalCode"
+    },
+    {
+      "COLUMN_NAME": "opponentAddress"
+    },
+    {
+      "COLUMN_NAME": "opponentPhone"
+    },
+    {
+      "COLUMN_NAME": "opponentRelation"
+    },
+    {
+      "COLUMN_NAME": "sfClientSentAt"
+    },
+    {
+      "COLUMN_NAME": "sfOpponentSentAt"
+    },
+    {
+      "COLUMN_NAME": "sfClientLeadId"
+    },
+    {
+      "COLUMN_NAME": "sfOpponentLeadId"
+    },
+    {
+      "COLUMN_NAME": "surveyResponseId"
+    },
+    {
+      "COLUMN_NAME": "intakeCompletedAt"
+    },
+    {
+      "COLUMN_NAME": "consultationCompletedAt"
+    },
+    {
+      "COLUMN_NAME": "surveyCompletedAt"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "paymentAmount"
+    },
+    {
+      "COLUMN_NAME": "paymentStatus"
+    },
+    {
+      "COLUMN_NAME": "paymentShownAt"
+    },
+    {
+      "COLUMN_NAME": "paymentConfirmedAt"
+    },
+    {
+      "COLUMN_NAME": "source"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nsessionToken\nstatus\ncaseCategory\ncaseType\nclientName\nclientNameKana\nclientBirthDate\nclientPostalCode\nclientAddress\nclientPhone\nclientMobile\nclientEmail\nclientOccupation\nclientReferrer\nconsultationReason\nopponentName\nopponentNameKana\nopponentPostalCode\nopponentAddress\nopponentPhone\nopponentRelation\nsfClientSentAt\nsfOpponentSentAt\nsfClientLeadId\nsfOpponentLeadId\nsurveyResponseId\nintakeCompletedAt\nconsultationCompletedAt\nsurveyCompletedAt\ncreatedAt\nupdatedAt\npaymentAmount\npaymentStatus\npaymentShownAt\npaymentConfirmedAt\nsource\n",
+  "stderr": "",
+  "execution_time_ms": 1540
+}

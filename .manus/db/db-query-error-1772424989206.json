@@ -1,0 +1,8 @@
+{
+  "query": "UPDATE intake_sessions SET payment_amount = 5000, payment_status = 'shown', payment_shown_at = NOW(), status = 'sf_pending', consultation_completed_at = NOW() WHERE session_token = 'RwlL4L4pO0R5Cf6FKSao3CwrDYpDGJ00';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute UPDATE intake_sessions SET payment_amount = 5000, payment_status = 'shown', payment_shown_at = NOW(), status = 'sf_pending', consultation_completed_at = NOW() WHERE session_token = 'RwlL4L4pO0R5Cf6FKSao3CwrDYpDGJ00';",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'bwmctobmawzyu8v22c5xf4.intake_sessions' doesn't exist"
+  ]
+}

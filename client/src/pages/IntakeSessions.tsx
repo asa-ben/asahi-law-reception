@@ -492,8 +492,8 @@ export default function IntakeSessions() {
                 {/* アクションボタン */}
                 <div className="border-t border-border pt-4 space-y-3">
 
-                  {/* 相談完了ボタン */}
-                  {(selectedSession.status === "waiting" || selectedSession.status === "consulting") && (
+                  {/* 相談完了ボタン（PayPay QR表示前のみ） */}
+                  {(selectedSession.status === "waiting" || selectedSession.status === "consulting") && selectedSession.paymentStatus === "pending" && (
                     <Button
                       onClick={() => completeConsultation.mutate({ token: selectedSession.sessionToken })}
                       disabled={completeConsultation.isPending}
@@ -504,8 +504,8 @@ export default function IntakeSessions() {
                     </Button>
                   )}
 
-                  {/* 相談料表示ボタン（sf_pending時に表示） */}
-                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "pending" && (
+                  {/* 相談料表示ボタン（waiting / consulting / sf_pending で paymentStatus === pending の場合に表示） */}
+                  {(selectedSession.status === "waiting" || selectedSession.status === "consulting" || selectedSession.status === "sf_pending") && selectedSession.paymentStatus === "pending" && (
                     <Button
                       onClick={() => setShowPaymentDialog(true)}
                       className="w-full gap-2 bg-[#FF0033] hover:bg-[#cc0029] text-white"
@@ -514,13 +514,13 @@ export default function IntakeSessions() {
                       相談料QRを依頼者画面に表示
                     </Button>
                   )}
-                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "shown" && (
+                  {(selectedSession.status === "waiting" || selectedSession.status === "consulting" || selectedSession.status === "sf_pending") && selectedSession.paymentStatus === "shown" && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       相談料QR表示中（依頼者の支払い待ち）— 金額: ¥{(selectedSession.paymentAmount ?? 0).toLocaleString()}
                     </div>
                   )}
-                  {selectedSession.status === "sf_pending" && selectedSession.paymentStatus === "confirmed" && (
+                  {selectedSession.paymentStatus === "confirmed" && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4" />
                       相談料支払い確認済み — ¥{(selectedSession.paymentAmount ?? 0).toLocaleString()}

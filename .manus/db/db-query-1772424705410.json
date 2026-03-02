@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE intakeSessions SET paymentAmount = 5000, paymentStatus = 'shown', paymentShownAt = NOW(), status = 'sf_pending' WHERE sessionToken = 'ffpuUMVBXGkNKNWTItlOS8fNbDQuNjku';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute UPDATE intakeSessions SET paymentAmount = 5000, paymentStatus = 'shown', paymentShownAt = NOW(), status = 'sf_pending' WHERE sessionToken = 'ffpuUMVBXGkNKNWTItlOS8fNbDQuNjku';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1567
+}

@@ -3,8 +3,8 @@
  * 事務所内タブレット専用の受付フロー
  *
  * フロー:
- * 1. 自動でセッションを作成（スタッフ操作不要）
- * 2. 依頼者が個人情報を入力・送信
+ * 1. 依頼者が案件種別を選択
+ * 2. 依頼者が個人情報を入力・送信（自動でセッション作成）
  * 3. 「相談中」待機画面（スタッフが受付管理から「相談料を表示」を押すまで待機）
  * 4. PayPay QR表示（スタッフが金額選択後、自動遷移）
  * 5. 支払い確認後、アンケート画面
@@ -30,7 +30,7 @@ import {
   Users,
   UserX,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const LOGO_MARK =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-mark_b1e753e6.png";
@@ -113,13 +113,16 @@ const VISIT_TRIGGERS = [
 
 const SATISFACTION_LABELS = ["", "不満", "やや不満", "普通", "満足", "大変満足"];
 
+// Google口コミURL（ハードコード）
+const GOOGLE_REVIEW_URL = "https://g.page/r/XXXXXXXXXXXXXXXX/review";
+
 // ─── フローステップ ───────────────────────────────────────
 type FlowStep =
-  | "init"        // セッション作成中
   | "category"    // 案件種別選択
   | "client"      // 依頼者情報入力
   | "opponent"    // 相手方情報入力
   | "confirm"     // 入力内容確認
+  | "submitting"  // 送信中
   | "waiting"     // 相談中待機（スタッフがPayPay金額を選ぶまで）
   | "payment"     // PayPay QR表示
   | "survey"      // アンケート
@@ -158,13 +161,63 @@ function Field({
   );
 }
 
+// ─── sessionStorage ヘルパー ────────────────────────────
+const STORAGE_KEY = "tablet_intake_state";
+
+type PersistedState = {
+  step: FlowStep;
+  token: string | null;
+  clientName: string;
+};
+
+function saveState(state: PersistedState) {
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+function loadState(): PersistedState | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedState;
+  } catch { return null; }
+}
+function clearState() {
+  try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
 // ─── メインコンポーネント ─────────────────────────────────
 export default function TabletIntake() {
-  const [step, setStep] = useState<FlowStep>("init");
-  const [token, setToken] = useState<string | null>(null);
-  const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  // sessionStorage から復元
+  const restored = useRef(loadState());
+  const initialStep = restored.current?.step ?? "category";
+  // waiting/payment/survey/done のみ復元可能（入力途中は復元しない）
+  const canRestore = ["waiting", "payment", "survey", "done"].includes(initialStep);
+
+  const [step, setStepRaw] = useState<FlowStep>(canRestore ? initialStep : "category");
+  const [token, setTokenRaw] = useState<string | null>(canRestore ? (restored.current?.token ?? null) : null);
+  const [form, setForm] = useState<FormData>({
+    ...INITIAL_FORM,
+    clientName: canRestore ? (restored.current?.clientName ?? "") : "",
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [countdown, setCountdown] = useState(5);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // sessionStorage に保存するラッパー
+  const setStep = useCallback((s: FlowStep) => {
+    setStepRaw(s);
+  }, []);
+  const setToken = useCallback((t: string | null) => {
+    setTokenRaw(t);
+  }, []);
+
+  // step/token/clientName が変わるたびに sessionStorage に保存
+  useEffect(() => {
+    if (step === "category" || step === "client" || step === "opponent" || step === "confirm" || step === "submitting") {
+      // 入力途中は保存しない（リロードしたら最初からやり直し）
+      return;
+    }
+    saveState({ step, token, clientName: form.clientName });
+  }, [step, token, form.clientName]);
 
   // アンケート用ステート
   const [satisfaction, setSatisfaction] = useState(0);
@@ -176,8 +229,6 @@ export default function TabletIntake() {
   const [googleReviewShown, setGoogleReviewShown] = useState(false);
   const [surveyResponseId, setSurveyResponseId] = useState<number | null>(null);
 
-  const utils = trpc.useUtils();
-
   // ─── tRPC ─────────────────────────────────────────────────────────
   const createSession = trpc.intake.createTabletSession.useMutation();
   const submitIntake = trpc.intake.submitIntake.useMutation();
@@ -185,10 +236,6 @@ export default function TabletIntake() {
   const submitSurvey = trpc.survey.submit.useMutation();
   const completeSurvey = trpc.intake.completeSurvey.useMutation();
   const clickReview = trpc.survey.clickReview.useMutation();
-
-  const { data: settings } = trpc.settings.getAll.useQuery();
-  const googleReviewUrl =
-    settings?.google_review_url || "https://g.page/r/XXXXXXXXXXXXXXXX/review";
 
   // セッションポーリング（waiting / payment 画面中のみ）
   const { data: session } = trpc.intake.getByToken.useQuery(
@@ -198,17 +245,6 @@ export default function TabletIntake() {
       refetchInterval: 3000,
     }
   );
-
-  // ─── 初期化：セッション自動作成 ───────────────────────
-  const initialized = useRef(false);
-  useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-    createSession.mutateAsync().then(({ token: t }) => {
-      setToken(t);
-      setStep("category");
-    });
-  }, []);
 
   // ─── ポーリング結果で画面遷移 ─────────────────────────
   useEffect(() => {
@@ -222,6 +258,24 @@ export default function TabletIntake() {
   }, [session?.paymentStatus, session?.status, step]);
 
   // ─── 完了後カウントダウン → リセット ─────────────────
+  const handleReset = useCallback(() => {
+    clearState();
+    setStep("category");
+    setToken(null);
+    setForm(INITIAL_FORM);
+    setErrors({});
+    setSubmitError(null);
+    setSatisfaction(0);
+    setHoveredStar(0);
+    setGoodPoints([]);
+    setVisitTrigger([]);
+    setVisitTriggerOther("");
+    setFreeComment("");
+    setGoogleReviewShown(false);
+    setSurveyResponseId(null);
+    setCountdown(5);
+  }, [setStep, setToken]);
+
   useEffect(() => {
     if (step !== "done") return;
     setCountdown(5);
@@ -236,34 +290,7 @@ export default function TabletIntake() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [step]);
-
-  // ─── リセット処理 ─────────────────────────────────────
-  const handleReset = () => {
-    setStep("init");
-    setToken(null);
-    setForm(INITIAL_FORM);
-    setErrors({});
-    setSatisfaction(0);
-    setHoveredStar(0);
-    setGoodPoints([]);
-    setVisitTrigger([]);
-    setVisitTriggerOther("");
-    setFreeComment("");
-    setGoogleReviewShown(false);
-    setSurveyResponseId(null);
-    initialized.current = false;
-    // 少し遅らせてから新セッション作成
-    setTimeout(() => {
-      if (!initialized.current) {
-        initialized.current = true;
-        createSession.mutateAsync().then(({ token: t }) => {
-          setToken(t);
-          setStep("category");
-        });
-      }
-    }, 100);
-  };
+  }, [step, handleReset]);
 
   // ─── フォームヘルパー ─────────────────────────────────
   const setField = (key: keyof FormData, val: string) => {
@@ -283,12 +310,22 @@ export default function TabletIntake() {
     return Object.keys(e).length === 0;
   };
 
-  // ─── 送信処理 ─────────────────────────────────────────
+  // ─── 送信処理（セッション作成 + 情報送信を一括で行う） ─────
   const handleSubmit = async () => {
-    if (!token) return;
+    setSubmitError(null);
+    setStep("submitting");
     try {
+      // 1. セッション作成
+      let sessionToken = token;
+      if (!sessionToken) {
+        const result = await createSession.mutateAsync();
+        sessionToken = result.token;
+        setToken(sessionToken);
+      }
+
+      // 2. 情報送信
       await submitIntake.mutateAsync({
-        token,
+        token: sessionToken,
         caseCategory: form.caseCategory as CaseCategory,
         caseType: form.caseType || undefined,
         clientName: form.clientName,
@@ -310,8 +347,10 @@ export default function TabletIntake() {
         opponentRelation: form.opponentRelation || undefined,
       });
       setStep("waiting");
-    } catch {
-      alert("送信に失敗しました。スタッフにお声がけください。");
+    } catch (err) {
+      console.error("Submit error:", err);
+      setSubmitError("送信に失敗しました。スタッフにお声がけください。");
+      setStep("confirm"); // 確認画面に戻す
     }
   };
 
@@ -353,7 +392,7 @@ export default function TabletIntake() {
     if (surveyResponseId) {
       await clickReview.mutateAsync({ id: surveyResponseId });
     }
-    window.open(googleReviewUrl, "_blank", "noopener,noreferrer");
+    window.open(GOOGLE_REVIEW_URL, "_blank", "noopener,noreferrer");
   };
 
   const toggleGoodPoint = (id: string) =>
@@ -370,17 +409,6 @@ export default function TabletIntake() {
       ? CASE_TYPES_WITH_OPPONENT
       : CASE_TYPES_NO_OPPONENT;
   const hasOpponent = form.caseCategory === "with_opponent";
-
-  // ─── 初期化中 ─────────────────────────────────────────
-  if (step === "init") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
-        <img src={LOGO_MARK} alt="" className="h-16 w-auto" />
-        <Loader2 className="h-8 w-8 animate-spin text-[#0d2a6e]" />
-        <p className="text-sm text-slate-500">準備中...</p>
-      </div>
-    );
-  }
 
   // ─── 案件種別選択 ─────────────────────────────────────
   if (step === "category") {
@@ -683,6 +711,13 @@ export default function TabletIntake() {
             <h2 className="text-lg font-bold text-slate-800">入力内容の確認</h2>
           </div>
 
+          {submitError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+              <p className="text-sm text-red-700">{submitError}</p>
+            </div>
+          )}
+
           {/* 依頼者情報 */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2">ご本人の情報</h3>
@@ -733,10 +768,10 @@ export default function TabletIntake() {
           <div className="pb-8 space-y-3">
             <Button
               onClick={handleSubmit}
-              disabled={submitIntake.isPending}
+              disabled={submitIntake.isPending || createSession.isPending}
               className="w-full h-12 text-base bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
             >
-              {submitIntake.isPending ? (
+              {(submitIntake.isPending || createSession.isPending) ? (
                 <><Loader2 className="h-4 w-4 animate-spin mr-2" />送信中...</>
               ) : "この内容で送信する"}
             </Button>
@@ -745,6 +780,17 @@ export default function TabletIntake() {
             </p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ─── 送信中 ───────────────────────────────────────────
+  if (step === "submitting") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
+        <img src={LOGO_MARK} alt="" className="h-16 w-auto" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#0d2a6e]" />
+        <p className="text-sm text-slate-500">送信中です...</p>
       </div>
     );
   }
@@ -1030,17 +1076,12 @@ export default function TabletIntake() {
     );
   }
 
-  // フォールバック
+  // フォールバック（payment step で session がまだ null の場合など）
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center space-y-3">
-        <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-        <p className="text-sm text-slate-600">エラーが発生しました。スタッフにお声がけください。</p>
-        <Button onClick={handleReset} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          リセット
-        </Button>
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <img src={LOGO_MARK} alt="" className="h-16 w-auto" />
+      <Loader2 className="h-8 w-8 animate-spin text-[#0d2a6e]" />
+      <p className="text-sm text-slate-500">読み込み中...</p>
     </div>
   );
 }

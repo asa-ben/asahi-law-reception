@@ -164,12 +164,20 @@ export const appRouter = router({
         amount: z.number().int().min(1, "金額は1円以上で入力してください"),
       }))
       .mutation(async ({ input }) => {
-        await updateIntakeSession(input.token, {
+        const session = await getIntakeSessionByToken(input.token);
+        if (!session) throw new Error("Session not found");
+        // waiting/consultingからも直接PayPay QRを表示できるようにする
+        // 相談完了も同時に記録
+        const updateData: Record<string, unknown> = {
           paymentAmount: input.amount,
           paymentStatus: "shown",
           paymentShownAt: new Date(),
-          status: "sf_pending",
-        });
+        };
+        if (session.status === "waiting" || session.status === "consulting") {
+          updateData.status = "sf_pending";
+          updateData.consultationCompletedAt = new Date();
+        }
+        await updateIntakeSession(input.token, updateData as any);
         return { success: true };
       }),
 

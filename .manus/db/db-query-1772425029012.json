@@ -1,0 +1,13 @@
+{
+  "query": "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'intakeSessions' AND COLUMN_NAME LIKE '%oken%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'intakeSessions' AND COLUMN_NAME LIKE '%oken%';",
+  "rows": [
+    {
+      "COLUMN_NAME": "sessionToken"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nsessionToken\n",
+  "stderr": "",
+  "execution_time_ms": 1545
+}
