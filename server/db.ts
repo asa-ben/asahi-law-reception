@@ -89,10 +89,10 @@ export async function setSetting(key: string, value: string): Promise<void> {
 
 // ── Intake Sessions ─────────────────────────────────────
 
-export async function createIntakeSession(token: string): Promise<number> {
+export async function createIntakeSession(token: string, source: "url" | "tablet" = "url"): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(intakeSessions).values({ sessionToken: token });
+  const result = await db.insert(intakeSessions).values({ sessionToken: token, source });
   return Number(result[0].insertId);
 }
 

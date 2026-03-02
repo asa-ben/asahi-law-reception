@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE intakeSessions ADD COLUMN IF NOT EXISTS source ENUM('url', 'tablet') NOT NULL DEFAULT 'url';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user nDmGDeAWH8rbn85.abab35a8fbd4 --database bWMCToBMaWZYU8v22C5xF4 --execute ALTER TABLE intakeSessions ADD COLUMN IF NOT EXISTS source ENUM('url', 'tablet') NOT NULL DEFAULT 'url';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2252
+}

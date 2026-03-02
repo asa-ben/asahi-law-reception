@@ -19,6 +19,7 @@ import {
   QrCode,
   Search,
   Send,
+  Tablet,
   UserCheck,
   Users,
   UserX,
@@ -67,6 +68,7 @@ type Session = {
   paymentStatus: "pending" | "shown" | "confirmed" | null;
   paymentShownAt: Date | null;
   paymentConfirmedAt: Date | null;
+  source: "url" | "tablet" | null;
   createdAt: Date;
 };
 
@@ -302,6 +304,11 @@ export default function IntakeSessions() {
                           )}
                         </p>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {s.source === "tablet" && (
+                            <span className="inline-flex items-center gap-0.5 bg-violet-100 text-violet-700 text-[10px] px-1.5 py-0.5 rounded-full mr-1.5 font-medium">
+                              <Tablet className="h-2.5 w-2.5" />タブレット
+                            </span>
+                          )}
                           {s.caseType ?? (s.caseCategory === "with_opponent" ? "相手方あり" : s.caseCategory === "no_opponent" ? "相手方なし" : "種別未選択")}
                           {" · "}
                           {new Date(s.createdAt).toLocaleDateString("ja-JP", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}

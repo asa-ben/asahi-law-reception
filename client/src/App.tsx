@@ -10,6 +10,7 @@ import IntakeForm from "./pages/IntakeForm";
 import IntakeSurvey from "./pages/IntakeSurvey";
 import IntakeSessions from "./pages/IntakeSessions";
 import Settings from "./pages/Settings";
+import TabletIntake from "./pages/TabletIntake";
 
 function Router() {
   return (
@@ -17,6 +18,8 @@ function Router() {
       {/* 公開ページ（ログイン不要・依頼者向け） */}
       <Route path="/intake/:token/survey" component={IntakeSurvey} />
       <Route path="/intake/:token" component={IntakeForm} />
+      {/* タブレット受付モード（ログイン不要） */}
+      <Route path="/tablet" component={TabletIntake} />
 
       {/* 管理画面（スタッフ用・DashboardLayout） */}
       <Route>

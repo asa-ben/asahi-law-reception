@@ -96,6 +96,12 @@ export const intakeSessions = mysqlTable("intakeSessions", {
   // ── アンケート ──
   surveyResponseId: int("surveyResponseId"),
 
+  // ── 受付経路 ──
+  source: mysqlEnum("source", [
+    "url",     // 事前受付URL（/intake/:token）
+    "tablet",  // タブレット受付モード（/tablet）
+  ]).default("url"),
+
   // ── タイムスタンプ ──
   intakeCompletedAt: timestamp("intakeCompletedAt"),
   consultationCompletedAt: timestamp("consultationCompletedAt"),

@@ -120,6 +120,22 @@ function createPublicCtx(): TrpcContext {
   };
 }
 
+describe("intake.createTabletSession", () => {
+  it("タブレットモード用セッションを公開エンドポイントで作成できる", async () => {
+    const caller = appRouter.createCaller(createPublicCtx());
+    const result = await caller.intake.createTabletSession();
+    expect(result).toHaveProperty("token");
+    expect(typeof result.token).toBe("string");
+    expect(result.token.length).toBeGreaterThan(0);
+  });
+
+  it("認証済みユーザーもタブレットモードセッションを作成できる", async () => {
+    const caller = appRouter.createCaller(createAdminCtx());
+    const result = await caller.intake.createTabletSession();
+    expect(result).toHaveProperty("token");
+  });
+});
+
 describe("intake.getByToken", () => {
   it("有効なトークンでセッションを取得できる", async () => {
     const caller = appRouter.createCaller(createPublicCtx());

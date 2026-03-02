@@ -26,6 +26,7 @@ import {
   LogOut,
   PanelLeft,
   Settings,
+  Tablet,
   UserCheck,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -40,6 +41,10 @@ const menuItems = [
   { icon: LayoutDashboard, label: "ダッシュボード", path: "/" },
   { icon: UserCheck, label: "受付管理", path: "/intake-sessions" },
   { icon: Settings, label: "設定", path: "/settings" },
+];
+
+const externalLinks = [
+  { icon: Tablet, label: "タブレット受付モード", path: "/tablet" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -105,7 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="text-xs text-muted-foreground mt-1 pl-0.5">依頼者登録システム</p>
           </SidebarHeader>
 
-          <SidebarContent className="px-2 py-3">
+          <SidebarContent className="px-2 py-3 flex flex-col gap-4">
             <SidebarMenu>
               {menuItems.map((item) => {
                 const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
@@ -127,6 +132,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 );
               })}
             </SidebarMenu>
+
+            {/* タブレット受付モードリンク */}
+            <div className="border-t border-border pt-3">
+              <p className="text-[10px] text-muted-foreground px-3 mb-2 uppercase tracking-wider">タブレット</p>
+              <SidebarMenu>
+                {externalLinks.map((item) => (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton
+                      onClick={() => window.open(item.path, "_blank", "noopener,noreferrer")}
+                      className="gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="border-t border-border p-3">

@@ -46,9 +46,18 @@ export const appRouter = router({
   // ── 受付セッション ────────────────────────────────────
   intake: router({
     // 新規セッション作成（スタッフ用）
-    createSession: protectedProcedure.mutation(async () => {
+    createSession: protectedProcedure
+      .input(z.object({ source: z.enum(["url", "tablet"]).optional() }).optional())
+      .mutation(async ({ input }) => {
+        const token = nanoid(32);
+        await createIntakeSession(token, input?.source ?? "url");
+        return { token };
+      }),
+
+    // タブレットモード用セッション作成（公開・ログイン不要）
+    createTabletSession: publicProcedure.mutation(async () => {
       const token = nanoid(32);
-      await createIntakeSession(token);
+      await createIntakeSession(token, "tablet");
       return { token };
     }),
 
