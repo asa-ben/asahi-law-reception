@@ -78,3 +78,10 @@
 - [x] PowerPointからPayPay QR画像を抽出・差し替え
 - [x] navigator.wakeLock APIでタブレットスリープ防止を実装
 - [ ] sakura-vps-deployスキルを使ってVPSにデプロイ（フルスタック対応必要）
+
+## さくらVPSデプロイ（2026-04-12）
+- [ ] VPS環境確認（Node.js・Nginx・Git・MySQL）
+- [ ] 依存関係インストール・環境変数設定
+- [ ] GitHubからクローン・ビルド・起動
+- [ ] Nginxリバースプロキシ設定・Basic認証設定
+- [ ] 自動デプロイスクリプト設置・動作確認

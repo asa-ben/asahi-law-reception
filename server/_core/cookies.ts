@@ -39,10 +39,12 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  const secure = isSecureRequest(req);
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    // HTTPSの場合はsameSite: "none"、HTTPの場合はsameSite: "lax"を使用
+    sameSite: secure ? "none" : "lax",
+    secure,
   };
 }

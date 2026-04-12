@@ -66,7 +66,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      window.location.href = getLoginUrl();
+      const useLocalAuth = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
+      window.location.href = useLocalAuth ? "/login" : getLoginUrl();
     }
   }, [loading, isAuthenticated]);
 

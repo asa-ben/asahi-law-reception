@@ -8,8 +8,12 @@ type UseAuthOptions = {
   redirectPath?: string;
 };
 
+// VPS環境かどうかを判定（ローカル認証エンドポイントが存在するか確認）
+const USE_LOCAL_AUTH = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
+
 export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
+  const loginUrl = USE_LOCAL_AUTH ? "/login" : getLoginUrl();
+  const { redirectOnUnauthenticated = false, redirectPath = loginUrl } =
     options ?? {};
   const utils = trpc.useUtils();
 
@@ -26,6 +30,13 @@ export function useAuth(options?: UseAuthOptions) {
 
   const logout = useCallback(async () => {
     try {
+      if (USE_LOCAL_AUTH) {
+        await fetch("/api/local-auth/logout", { method: "POST", credentials: "include" });
+        utils.auth.me.setData(undefined, null);
+        await utils.auth.me.invalidate();
+        window.location.href = "/login";
+        return;
+      }
       await logoutMutation.mutateAsync();
     } catch (error: unknown) {
       if (
@@ -67,7 +78,7 @@ export function useAuth(options?: UseAuthOptions) {
     if (typeof window === "undefined") return;
     if (window.location.pathname === redirectPath) return;
 
-    window.location.href = redirectPath
+    window.location.href = redirectPath;
   }, [
     redirectOnUnauthenticated,
     redirectPath,

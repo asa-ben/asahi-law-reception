@@ -11,6 +11,7 @@ import IntakeSurvey from "./pages/IntakeSurvey";
 import IntakeSessions from "./pages/IntakeSessions";
 import Settings from "./pages/Settings";
 import TabletIntake from "./pages/TabletIntake";
+import LocalLogin from "./pages/LocalLogin";
 
 function Router() {
   return (
@@ -20,6 +21,8 @@ function Router() {
       <Route path="/intake/:token" component={IntakeForm} />
       {/* タブレット受付モード（ログイン不要） */}
       <Route path="/tablet" component={TabletIntake} />
+      {/* ローカル認証ログインページ（VPS環境用） */}
+      <Route path="/login" component={LocalLogin} />
 
       {/* 管理画面（スタッフ用・DashboardLayout） */}
       <Route>
