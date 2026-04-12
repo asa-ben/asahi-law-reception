@@ -2,9 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, ExternalLink, Loader2, Save, Settings2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, Save, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+const USE_LOCAL_AUTH = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
 
 export default function Settings() {
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
@@ -20,6 +22,46 @@ export default function Settings() {
   const [sfUrl, setSfUrl] = useState("https://webto.salesforce.com/servlet/servlet.WebToLead?encoding=UTF-8");
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
+
+  // パスワード変更用ステート
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChanging, setPasswordChanging] = useState(false);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("新しいパスワードと確認用パスワードが一致しません");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("パスワードは8文字以上で入力してください");
+      return;
+    }
+    setPasswordChanging(true);
+    try {
+      const res = await fetch("/api/local-auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("パスワードを変更しました");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        toast.error(data.error || "パスワードの変更に失敗しました");
+      }
+    } catch {
+      toast.error("サーバーへの接続に失敗しました");
+    } finally {
+      setPasswordChanging(false);
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -145,6 +187,82 @@ export default function Settings() {
           </a>
         </div>
       </div>
+
+      {/* パスワード変更（VPS環境のみ表示） */}
+      {USE_LOCAL_AUTH && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
+          <div>
+            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              パスワード変更
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              管理画面のログインパスワードを変更します。
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordChange} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password" className="text-sm font-medium">
+                現在のパスワード
+              </Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="現在のパスワードを入力"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-password" className="text-sm font-medium">
+                新しいパスワード
+              </Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="8文字以上で入力"
+                required
+                minLength={8}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password" className="text-sm font-medium">
+                新しいパスワード（確認）
+              </Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="新しいパスワードを再入力"
+                required
+                minLength={8}
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive">パスワードが一致しません</p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={passwordChanging || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+              className="gap-1.5 bg-[#0d2a6e] hover:bg-[#0d2a6e]/90"
+            >
+              {passwordChanging ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />変更中...</>
+              ) : (
+                <><KeyRound className="h-4 w-4" />パスワードを変更</>
+              )}
+            </Button>
+          </form>
+        </div>
+      )}
 
       {/* Google口コミ設定 */}
       <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
