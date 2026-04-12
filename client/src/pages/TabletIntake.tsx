@@ -32,18 +32,46 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+// タブレットのスリープ防止
+let wakeLockSentinel: WakeLockSentinel | null = null;
+
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLockSentinel = await navigator.wakeLock.request("screen");
+      console.log("Wake Lock acquired");
+    }
+  } catch (err) {
+    console.error("Wake Lock request failed:", err);
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    wakeLockSentinel.release().then(() => {
+      wakeLockSentinel = null;
+      console.log("Wake Lock released");
+    });
+  }
+}
+
+// WakeLockSentinelの型定義
+interface WakeLockSentinel {
+  release(): Promise<void>;
+}
+
 const LOGO_MARK =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-mark_b1e753e6.png";
 const LOGO_TEXT =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-text_c0ce50d8.png";
 
-// PayPay QR画像（ダミー）※後ほど実際の画像URLに差し替えてください
+// PayPay QR画像（実際の画像URL）
 const PAYPAY_QR_5000 =
-  "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%C2%A55%2C000";
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/qr_slide1_img12_f1b555db.png";
 const PAYPAY_QR_10000 =
-  "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%C2%A510%2C000";
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/qr_slide1_img15_a25446cc.png";
 const PAYPAY_QR_OTHER =
-  "https://placehold.co/280x280/FF0033/white?text=PayPay+QR%0A%E4%BB%BB%E6%84%8F%E9%87%91%E9%A1%8D";
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/qr_slide1_img12_f1b555db.png";
 
 function getQrImage(amount: number): string {
   if (amount === 5000) return PAYPAY_QR_5000;
@@ -218,6 +246,14 @@ export default function TabletIntake() {
     }
     saveState({ step, token, clientName: form.clientName });
   }, [step, token, form.clientName]);
+
+  // タブレットのスリープ防止（ページロード時にwakeLockを取得）
+  useEffect(() => {
+    requestWakeLock();
+    return () => {
+      releaseWakeLock();
+    };
+  }, []);
 
   // アンケート用ステート
   const [satisfaction, setSatisfaction] = useState(0);
