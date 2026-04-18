@@ -90,10 +90,12 @@ export async function verifyLocalSession(token: string): Promise<{ openId: strin
 }
 
 export function registerLocalAuthRoutes(app: Express) {
-  // ログインページ（フロントエンドで処理するためここでは不要）
-  
+  // ベースパスの設定（VPS環境では/uketsuke、通常は空文字）
+  const basePath = (process.env.VITE_BASE_PATH ?? "/").replace(/\/$/, "");
+  console.log(`[LocalAuth] Registering routes with basePath: '${basePath}'`);
+
   // パスワードログインAPI
-  app.post("/api/local-auth/login", async (req: Request, res: Response) => {
+  app.post(`${basePath}/api/local-auth/login`, async (req: Request, res: Response) => {
     const { password } = req.body;
     
     // process.envを直接参照（パスワード変更後に即座反映させるため）
@@ -124,13 +126,13 @@ export function registerLocalAuthRoutes(app: Express) {
   });
 
   // ログアウトAPI
-  app.post("/api/local-auth/logout", (req: Request, res: Response) => {
+  app.post(`${basePath}/api/local-auth/logout`, (req: Request, res: Response) => {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     res.json({ success: true });
   });
   // パスワード変更API（認証必要）
-  app.post("/api/local-auth/change-password", async (req: Request, res: Response) => {
+  app.post(`${basePath}/api/local-auth/change-password`, async (req: Request, res: Response) => {
     // セッション確認
     const cookies = req.headers.cookie;
     if (!cookies) {

@@ -90,3 +90,10 @@
 - [x] パスワード変更API（サーバー側: /api/local-auth/change-password）
 - [x] パスワード変更UI（設定ページに追加）
 - [x] VPSへのデプロイと動作確認
+
+## サブパス /uketsuke/ 対応（2026-04-18）
+- [x] vite.config.tsのbase設定を/uketsuke/に変更
+- [x] App.tsxのwouter basepathを/uketsuke/に設定
+- [x] サーバー側のAPIパスをVPS環境で/uketsuke/api/に対応
+- [x] Nginx設定を/uketsuke/サブパス対応に変更
+- [x] VPSへのデプロイと動作確認

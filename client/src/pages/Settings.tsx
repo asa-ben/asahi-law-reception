@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const USE_LOCAL_AUTH = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
+const BASE_PATH = import.meta.env.VITE_BASE_PATH ?? "/";
+const API_BASE = BASE_PATH === "/" ? "" : BASE_PATH.replace(/\/$/, "");
 
 export default function Settings() {
   const { data: settings, isLoading, refetch } = trpc.settings.getAll.useQuery();
@@ -41,7 +43,7 @@ export default function Settings() {
     }
     setPasswordChanging(true);
     try {
-      const res = await fetch("/api/local-auth/change-password", {
+      const res = await fetch(`${API_BASE}/api/local-auth/change-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword }),

@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Router } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
@@ -13,7 +13,12 @@ import Settings from "./pages/Settings";
 import TabletIntake from "./pages/TabletIntake";
 import LocalLogin from "./pages/LocalLogin";
 
-function Router() {
+// VPS環境では/uketsukeをベースパスに設定
+const BASE_PATH = import.meta.env.VITE_BASE_PATH ?? "/";
+// 末尾の/を除去（wouterは末尾なしを期待）
+const WOUTER_BASE = BASE_PATH.endsWith("/") ? BASE_PATH.slice(0, -1) : BASE_PATH;
+
+function AppRouter() {
   return (
     <Switch>
       {/* 公開ページ（ログイン不要・依頼者向け） */}
@@ -46,7 +51,9 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Router base={WOUTER_BASE}>
+            <AppRouter />
+          </Router>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

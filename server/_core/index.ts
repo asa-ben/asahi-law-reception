@@ -35,6 +35,10 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // ベースパスの設定（VPS環境では/uketsuke/、通常は/）
+  const basePath = (process.env.VITE_BASE_PATH ?? "/").replace(/\/$/, ""); // 末尾の/を除去
+
   // OAuth callback under /api/oauth/callback
   if (ENV.useLocalAuth) {
     // VPS環境用ローカル認証
@@ -43,9 +47,10 @@ async function startServer() {
     // Manus OAuth
     registerOAuthRoutes(app);
   }
-  // tRPC API
+  // tRPC API（ベースパス対応）
+  const trpcPath = `${basePath}/api/trpc`;
   app.use(
-    "/api/trpc",
+    trpcPath,
     createExpressMiddleware({
       router: appRouter,
       createContext,
@@ -55,7 +60,7 @@ async function startServer() {
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    serveStatic(app, basePath);
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");

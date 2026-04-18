@@ -8,6 +8,8 @@ import { Lock, Eye, EyeOff } from "lucide-react";
 const LOGO_MARK = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-mark_b1e753e6.png";
 const LOGO_TEXT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663339519816/bWMCToBMaWZYU8v22C5xF4/asahi-logo-text_c0ce50d8.png";
 
+const BASE_PATH = import.meta.env.VITE_BASE_PATH ?? "/";
+
 export default function LocalLogin() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -19,8 +21,9 @@ export default function LocalLogin() {
     setError("");
     setLoading(true);
 
+    const apiBase = BASE_PATH === "/" ? "" : BASE_PATH.replace(/\/$/, "");
     try {
-      const res = await fetch("/api/local-auth/login", {
+      const res = await fetch(`${apiBase}/api/local-auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
@@ -28,7 +31,7 @@ export default function LocalLogin() {
       });
 
       if (res.ok) {
-        window.location.href = "/";
+        window.location.href = BASE_PATH;
       } else {
         const data = await res.json();
         setError(data.error || "ログインに失敗しました");

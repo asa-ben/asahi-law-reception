@@ -10,9 +10,12 @@ type UseAuthOptions = {
 
 // VPS環境かどうかを判定（ローカル認証エンドポイントが存在するか確認）
 const USE_LOCAL_AUTH = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
+const BASE_PATH = import.meta.env.VITE_BASE_PATH ?? "/";
+const API_BASE = BASE_PATH === "/" ? "" : BASE_PATH.replace(/\/$/, "");
+const LOGIN_PATH = `${API_BASE}/login`;
 
 export function useAuth(options?: UseAuthOptions) {
-  const loginUrl = USE_LOCAL_AUTH ? "/login" : getLoginUrl();
+  const loginUrl = USE_LOCAL_AUTH ? LOGIN_PATH : getLoginUrl();
   const { redirectOnUnauthenticated = false, redirectPath = loginUrl } =
     options ?? {};
   const utils = trpc.useUtils();
@@ -31,10 +34,10 @@ export function useAuth(options?: UseAuthOptions) {
   const logout = useCallback(async () => {
     try {
       if (USE_LOCAL_AUTH) {
-        await fetch("/api/local-auth/logout", { method: "POST", credentials: "include" });
+        await fetch(`${API_BASE}/api/local-auth/logout`, { method: "POST", credentials: "include" });
         utils.auth.me.setData(undefined, null);
         await utils.auth.me.invalidate();
-        window.location.href = "/login";
+        window.location.href = LOGIN_PATH;
         return;
       }
       await logoutMutation.mutateAsync();
