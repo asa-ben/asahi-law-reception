@@ -97,3 +97,8 @@
 - [x] サーバー側のAPIパスをVPS環境で/uketsuke/api/に対応
 - [x] Nginx設定を/uketsuke/サブパス対応に変更
 - [x] VPSへのデプロイと動作確認
+
+## 残タスク完了（2026-04-26）
+- [x] PM2自動起動の永続化（pm2 save && sudo pm2 startup systemd）
+- [x] VPS全アプリ構成の調査と引き継ぎドキュメント作成（VPS_HANDOVER.md）
+- [x] VPS動作確認（https://asahi-l.com/uketsuke/login → ログイン → ダッシュボード表示）
