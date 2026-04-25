@@ -43,8 +43,9 @@ const menuItems = [
   { icon: Settings, label: "設定", path: "/settings" },
 ];
 
+const BASE_PATH = (import.meta.env.VITE_BASE_PATH ?? "").replace(/\/$/, "");
 const externalLinks = [
-  { icon: Tablet, label: "タブレット受付モード", path: "/tablet" },
+  { icon: Tablet, label: "タブレット受付モード", path: `${BASE_PATH}/tablet` },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -67,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       const useLocalAuth = import.meta.env.VITE_USE_LOCAL_AUTH === "true";
-      window.location.href = useLocalAuth ? "/login" : getLoginUrl();
+      window.location.href = useLocalAuth ? `${BASE_PATH}/login` : getLoginUrl();
     }
   }, [loading, isAuthenticated]);
 
